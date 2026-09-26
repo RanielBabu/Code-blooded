@@ -386,56 +386,11 @@ export default function ParticipantDashboardPage() {
                     </td>
                   </tr>
                 ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.04]">
-                  {(data?.trials ?? []).slice(0, 5).map((trial, idx) => (
-                    <tr key={trial.id || idx} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="py-2.5 px-3 font-mono text-[#A5ADBD]">
-                        #{idx + 1}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-white/[0.04] border border-white/10 text-white">
-                          {trial.stimulusType}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-white">
-                        {trial.reactionTimeMs} ms
-                      </td>
-                      <td className="py-2.5 px-3">
-                        {trial.correct ? (
-                          <span className="inline-flex items-center gap-1 text-[#22C55E] text-[11px]">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Correct
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[#EF4444] text-[11px]">
-                            <XCircle className="w-3.5 h-3.5" /> Missed
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 font-mono text-[#A5ADBD]">
-                        {trial.response?.selectedAnswer || "—"}
-                      </td>
-                      <td className="py-2.5 px-3 text-[#697386] font-mono text-[10px]">
-                        {new Date(trial.respondedAt || trial.startedAt || Date.now()).toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </td>
-                    </tr>
-                  ))}
-                  {(!data?.trials || data.trials.length === 0) && (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-[#697386] text-xs">
-                        No trial results recorded yet. Launch an experiment above to record your first trials!
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+              </tbody>
+            </table>
           </div>
         </div>
+      </div>
       </DashboardLayout>
     </RouteGuard>
   );

@@ -22,6 +22,7 @@ export interface User {
   id: string;
   role: Role;
   displayName: string;
+  email?: string;
   dateOfBirth?: string;
   age?: number;
   sex?: Sex;
@@ -33,15 +34,17 @@ export interface User {
 
 export interface ParticipantLoginCredentials {
   name: string;
+  email: string;
   dateOfBirth: string;
   sex: Sex;
 }
 
 export interface ResearcherLoginCredentials {
   name: string;
+  email: string;
   dateOfBirth: string;
   sex: Sex;
-  institutionalId: string;
+  institutionalId?: string;
 }
 
 export interface AgeValidationResult {

@@ -1,11 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { RouteGuard } from "@/components/auth/RouteGuard";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useParticipantPersonal } from "@/hooks/use-participant-personal";
+import { experimentService } from "@/lib/api/services/experiment-service";
+import { Experiment } from "@/types/experiment";
 import {
   Timer,
   Zap,
@@ -20,14 +22,32 @@ import {
   XCircle,
   Clock,
   ShieldCheck,
+  Play,
+  Layers,
+  AlertCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 
 export default function ParticipantDashboardPage() {
   const { user } = useAuth();
   const { data, loading } = useParticipantPersonal(user?.id);
+  const [publishedGames, setPublishedGames] = useState<Experiment[]>([]);
 
-  const participant = data?.participant;
+  const fetchGames = useCallback(async () => {
+    try {
+      const games = await experimentService.getPublished();
+      setPublishedGames(games);
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchGames();
+    const interval = setInterval(fetchGames, 2000);
+    return () => clearInterval(interval);
+  }, [fetchGames]);
+
   const pBests = data?.personalBests;
 
   return (
@@ -37,11 +57,11 @@ export default function ParticipantDashboardPage() {
         subtitle="Your private performance telemetry, reaction times, and active studies"
         actions={
           <Link
-            href="/preview/exp-color-response"
+            href="/participant/experiments"
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#10B981] hover:bg-[#059669] text-white text-xs font-semibold shadow-[0_0_15px_-3px_rgba(16,185,129,0.4)] transition-all"
           >
-            <Zap className="w-3.5 h-3.5 fill-current" />
-            <span>Launch Study</span>
+            <Play className="w-3 h-3 fill-current" />
+            <span>Browse Studies ({publishedGames.length})</span>
           </Link>
         }
       >
@@ -164,45 +184,90 @@ export default function ParticipantDashboardPage() {
           </div>
         </div>
 
-        {/* Middle Section: Active Study Launch Card & Personal Bests Snippet */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Active Study Launch Card */}
-          <div className="lg:col-span-2 rounded-2xl bg-[#0A0D14] border border-white/10 p-6 flex flex-col justify-between">
+        {/* ========================================================================= */}
+        {/* DESIRED PARTICIPANT STUDY LIBRARY CARDS (Reference Layout: 3 on row 1, 2 on row 2) */}
+        {/* ========================================================================= */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <Badge variant="cyan" size="sm">Available Experiment</Badge>
-                <span className="text-[11px] font-mono text-[#A5ADBD] flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5" /> ~2-3 minutes
-                </span>
-              </div>
-              <h3 className="text-lg font-bold text-white mb-2">
-                Color Response & Inhibitory Latency Study
+              <h3 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                <Play className="w-4 h-4 text-[#10B981] fill-current" />
+                Available Studies & Experiments
               </h3>
-              <p className="text-xs text-[#A5ADBD] leading-relaxed mb-4">
-                Test your sensory-motor reaction speed when presented with color flashes and shape stimuli.
-                Your response time is timed with browser animation-frame precision.
+              <p className="text-xs text-[#A5ADBD]">
+                Live protocols currently published by researchers. Choose a study to begin.
               </p>
-              <div className="flex flex-wrap gap-2 text-[11px] font-mono text-[#697386] mb-6">
-                <span className="px-2 py-1 rounded bg-white/[0.04] border border-white/5">Visual Stimuli</span>
-                <span className="px-2 py-1 rounded bg-white/[0.04] border border-white/5">Keyboard / Click</span>
-                <span className="px-2 py-1 rounded bg-white/[0.04] border border-white/5">3 Stages</span>
-                <span className="px-2 py-1 rounded bg-white/[0.04] border border-white/5">Immediate Feedback</span>
-              </div>
             </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-white/[0.06]">
-              <span className="text-xs text-[#A5ADBD]">Ready to set a new personal record?</span>
-              <Link
-                href="/preview/exp-color-response"
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-[#10B981] to-[#059669] hover:brightness-110 text-white text-xs font-semibold shadow-[0_0_15px_-3px_rgba(16,185,129,0.4)] transition-all"
-              >
-                <span>Start Experiment Now</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
+            <span className="text-xs font-mono text-[#697386]">
+              {publishedGames.length} Active Studies
+            </span>
           </div>
 
-          {/* Personal Bests Highlight Card */}
+          {publishedGames.length === 0 ? (
+            <div className="py-12 px-6 rounded-2xl bg-[#0A0D14] border border-white/10 text-center max-w-md mx-auto space-y-2">
+              <AlertCircle className="w-8 h-8 text-amber-400 mx-auto" />
+              <p className="text-sm font-semibold text-white">No Studies Published Yet</p>
+              <p className="text-xs text-[#A5ADBD]">
+                Your researcher has not yet enabled any active games. Please check back shortly.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {publishedGames.map((study) => (
+                <div
+                  key={study.id}
+                  className="rounded-2xl bg-[#0A0D14] border border-white/10 hover:border-[#10B981]/40 p-6 flex flex-col justify-between transition-all duration-200 group hover:shadow-[0_0_25px_-5px_rgba(16,185,129,0.15)] relative overflow-hidden"
+                >
+                  <div>
+                    {/* Card Top: Published Badge & Version */}
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#10B981]/15 border border-[#10B981]/30 text-[#34D399] text-[10px] font-mono font-medium tracking-wide">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
+                        PUBLISHED
+                      </span>
+                      <span className="text-[11px] font-mono text-[#697386] bg-white/[0.04] px-2 py-0.5 rounded border border-white/5">
+                        v{study.version || 1}
+                      </span>
+                    </div>
+
+                    {/* Large Simple Game Title */}
+                    <h3 className="text-xl font-bold text-white group-hover:text-[#34D399] transition-colors mb-2">
+                      {study.name}
+                    </h3>
+
+                    {/* Short Description */}
+                    <p className="text-xs text-[#A5ADBD] leading-relaxed mb-6">
+                      {study.description}
+                    </p>
+                  </div>
+
+                  {/* Card Bottom: Metadata & Single Primary Action Button */}
+                  <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between gap-2">
+                    <div className="text-[10px] font-mono text-[#697386]">
+                      <div>Updated: {new Date(study.updatedAt || Date.now()).toLocaleDateString("en-GB")}</div>
+                      <div className="flex items-center gap-1 text-[#A5ADBD] mt-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#4F8CFF]" />
+                        Live Version: {study.version || 1}
+                      </div>
+                    </div>
+
+                    <Link
+                      href={`/preview/${study.id}`}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#10B981] to-[#059669] hover:brightness-110 text-white text-xs font-semibold shadow-[0_0_15px_-3px_rgba(16,185,129,0.35)] transition-all"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Play Study</span>
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Section: Personal Trophies Snippet & Recent Trials */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+          {/* Personal Trophies Card */}
           <div className="rounded-2xl bg-[#0A0D14] border border-white/10 p-6 flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-4">
@@ -227,7 +292,7 @@ export default function ParticipantDashboardPage() {
                     <div>
                       <p className="text-xs font-semibold text-white">Fastest Response</p>
                       <p className="text-[10px] text-[#A5ADBD] font-mono">
-                        {pBests?.fastestRt?.taskName || "Color Response"}
+                        {pBests?.fastestRt?.taskName || "Reaction Speed"}
                       </p>
                     </div>
                   </div>
@@ -243,28 +308,11 @@ export default function ParticipantDashboardPage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold text-white">Peak Accuracy</p>
-                      <p className="text-[10px] text-[#A5ADBD] font-mono">
-                        {pBests?.bestAccuracy?.taskName || "Standard Protocol"}
-                      </p>
+                      <p className="text-[10px] text-[#A5ADBD] font-mono">Precision rate</p>
                     </div>
                   </div>
                   <span className="text-xs font-mono font-bold text-[#F59E0B]">
                     {pBests?.bestAccuracy?.value ?? 100}%
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-[#10B981]/15 border border-[#10B981]/30 flex items-center justify-center text-[#10B981]">
-                      <Sparkles className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-white">Color Stimulus Best</p>
-                      <p className="text-[10px] text-[#A5ADBD] font-mono">Visual chroma speed</p>
-                    </div>
-                  </div>
-                  <span className="text-xs font-mono font-bold text-[#10B981]">
-                    {pBests?.bestColorRt?.value ?? 240} ms
                   </span>
                 </div>
               </div>
@@ -276,81 +324,80 @@ export default function ParticipantDashboardPage() {
               </p>
             </div>
           </div>
-        </div>
 
-        {/* Recent Trial Breakdown */}
-        <div className="rounded-2xl bg-[#0A0D14] border border-white/10 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-white">Recent Trial Latencies</h3>
-              <p className="text-xs text-[#A5ADBD]">Your latest recorded behavioral trial responses</p>
+          {/* Recent Trial Breakdown */}
+          <div className="lg:col-span-2 rounded-2xl bg-[#0A0D14] border border-white/10 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-white">Recent Trial Latencies</h3>
+                <p className="text-xs text-[#A5ADBD]">Your latest recorded behavioral trial responses</p>
+              </div>
+              <Link
+                href="/participant/performance"
+                className="text-xs text-[#60A5FA] hover:underline flex items-center gap-1"
+              >
+                Detailed Performance <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
-            <Link
-              href="/participant/performance"
-              className="text-xs text-[#60A5FA] hover:underline flex items-center gap-1"
-            >
-              Detailed Performance <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-white/[0.08] text-[#697386] font-mono text-[10px] uppercase">
-                  <th className="py-2.5 px-3">Trial ID</th>
-                  <th className="py-2.5 px-3">Stimulus</th>
-                  <th className="py-2.5 px-3">Reaction Time</th>
-                  <th className="py-2.5 px-3">Outcome</th>
-                  <th className="py-2.5 px-3">Key / Response</th>
-                  <th className="py-2.5 px-3">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.04]">
-                {(data?.trials ?? []).slice(0, 6).map((trial, idx) => (
-                  <tr key={trial.id || idx} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-2.5 px-3 font-mono text-[#A5ADBD]">
-                      #{idx + 1} ({trial.trialNumber})
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-white/[0.04] border border-white/10 text-white">
-                        {trial.stimulusType}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-white">
-                      {trial.reactionTimeMs} ms
-                    </td>
-                    <td className="py-2.5 px-3">
-                      {trial.correct ? (
-                        <span className="inline-flex items-center gap-1 text-[#22C55E] text-[11px]">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Correct
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[#EF4444] text-[11px]">
-                          <XCircle className="w-3.5 h-3.5" /> Missed
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[#A5ADBD]">
-                      {trial.response?.selectedAnswer || "—"}
-                    </td>
-                    <td className="py-2.5 px-3 text-[#697386] font-mono text-[10px]">
-                      {new Date(trial.respondedAt || trial.startedAt || Date.now()).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-white/[0.08] text-[#697386] font-mono text-[10px] uppercase">
+                    <th className="py-2.5 px-3">Trial ID</th>
+                    <th className="py-2.5 px-3">Stimulus</th>
+                    <th className="py-2.5 px-3">Reaction Time</th>
+                    <th className="py-2.5 px-3">Outcome</th>
+                    <th className="py-2.5 px-3">Response</th>
+                    <th className="py-2.5 px-3">Time</th>
                   </tr>
-                ))}
-                {(!data?.trials || data.trials.length === 0) && (
-                  <tr>
-                    <td colSpan={6} className="py-8 text-center text-[#697386] text-xs">
-                      No trial results recorded yet. Launch an experiment above to record your first trials!
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-white/[0.04]">
+                  {(data?.trials ?? []).slice(0, 5).map((trial, idx) => (
+                    <tr key={trial.id || idx} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-2.5 px-3 font-mono text-[#A5ADBD]">
+                        #{idx + 1}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-white/[0.04] border border-white/10 text-white">
+                          {trial.stimulusType}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-white">
+                        {trial.reactionTimeMs} ms
+                      </td>
+                      <td className="py-2.5 px-3">
+                        {trial.correct ? (
+                          <span className="inline-flex items-center gap-1 text-[#22C55E] text-[11px]">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Correct
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[#EF4444] text-[11px]">
+                            <XCircle className="w-3.5 h-3.5" /> Missed
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[#A5ADBD]">
+                        {trial.response?.selectedAnswer || "—"}
+                      </td>
+                      <td className="py-2.5 px-3 text-[#697386] font-mono text-[10px]">
+                        {new Date(trial.respondedAt || trial.startedAt || Date.now()).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                  {(!data?.trials || data.trials.length === 0) && (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-[#697386] text-xs">
+                        No trial results recorded yet. Launch an experiment above to record your first trials!
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </DashboardLayout>

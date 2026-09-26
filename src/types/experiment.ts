@@ -36,7 +36,7 @@ export interface ExperimentEdge {
   animated?: boolean;
 }
 
-export type ExperimentStatus = "draft" | "published" | "archived";
+export type ExperimentStatus = "draft" | "published" | "disabled" | "archived";
 
 export interface Experiment {
   id: string;

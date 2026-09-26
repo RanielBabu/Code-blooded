@@ -48,6 +48,22 @@ export function useExperiments() {
     return updated;
   };
 
+  const unpublishExperiment = async (id: string) => {
+    const updated = await experimentService.unpublish(id);
+    if (updated) {
+      setExperiments((prev) => prev.map((e) => (e.id === id ? updated : e)));
+    }
+    return updated;
+  };
+
+  const togglePublishExperiment = async (id: string, publish?: boolean) => {
+    const updated = await experimentService.togglePublish(id, publish);
+    if (updated) {
+      setExperiments((prev) => prev.map((e) => (e.id === id ? updated : e)));
+    }
+    return updated;
+  };
+
   const archiveExperiment = async (id: string) => {
     const updated = await experimentService.archive(id);
     if (updated) {
@@ -71,6 +87,8 @@ export function useExperiments() {
     refresh: fetchExperiments,
     saveExperiment,
     publishExperiment,
+    unpublishExperiment,
+    togglePublishExperiment,
     archiveExperiment,
     duplicateExperiment,
   };

@@ -17,8 +17,19 @@ export default function PreviewPage({ params }: { params: Promise<{ id: string }
         if (exp) {
           setExperiment(exp);
         } else {
-          const all = await experimentService.getAll();
-          setExperiment(all[0]);
+          setExperiment({
+            id: resolvedParams.id,
+            name: "Unknown Study",
+            description: "This study was not found or has been removed.",
+            status: "disabled",
+            version: 1,
+            tags: [],
+            trialCount: 0,
+            nodes: [],
+            edges: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
         }
       } finally {
         setLoading(false);

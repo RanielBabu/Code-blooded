@@ -9,6 +9,7 @@ import { formatMs, formatPercent } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import {
   Shield,
+  ShieldAlert,
   Play,
   ArrowRight,
   CheckCircle,
@@ -25,6 +26,10 @@ import {
   Eye,
   Compass,
   Cpu,
+  Volume2,
+  Radio,
+  Search,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import confetti from "canvas-confetti";
@@ -50,6 +55,29 @@ interface TrialStimulus {
   iconName?: string;
   iconColor?: string;
   imageUrl?: string;
+  flashCount?: number;
+  toneFrequency?: number;
+  isOddball?: boolean;
+  targetPosition?: string;
+}
+
+// Web Audio API tone generator for Tone Detect
+function playAudioTone(freq: number, durationMs: number = 200) {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durationMs / 1000);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + durationMs / 1000);
+  } catch {}
 }
 
 function renderVisualStimulus(name?: string, color?: string, imageUrl?: string) {
@@ -87,292 +115,151 @@ function renderVisualStimulus(name?: string, color?: string, imageUrl?: string) 
       return <Compass {...iconProps} />;
     case "Cpu":
       return <Cpu {...iconProps} />;
+    case "Volume2":
+      return <Volume2 {...iconProps} />;
     default:
       return <Sparkles {...iconProps} />;
   }
 }
 
-function resolveExperimentFlow(experiment: Experiment) {
-  const nodes = experiment.nodes || [];
-  const edges = experiment.edges || [];
+interface ExperimentFlowConfig {
+  mode: "flash-count" | "tone-detect" | "visual-search" | "object-hunt" | "color";
+  headline: string;
+  description: string;
+  tip: string;
+  trials: TrialStimulus[];
+}
 
-  const stimulusNodes = nodes.filter(
-    (n) => n.type === "stimulusNode" || n.data?.category === "stimulus"
-  );
+function resolveExperimentFlow(experiment: Experiment): ExperimentFlowConfig {
+  const expId = experiment.id;
+  const expName = (experiment.name || "").toLowerCase();
 
-  const connectedIds = new Set<string>();
-  edges.forEach((e) => {
-    connectedIds.add(e.source);
-    connectedIds.add(e.target);
-  });
-
-  const connectedStimulusNodes = stimulusNodes.filter((n) => connectedIds.has(n.id));
-  const activeNode = connectedStimulusNodes[0] || stimulusNodes[0] || null;
-
-  const label = String(activeNode?.data?.label || "").toLowerCase();
-  const config = (activeNode?.data?.config || {}) as Record<string, any>;
-  const iconName = String(activeNode?.data?.iconName || "").toLowerCase();
-
-  let mode: "text" | "image" | "color" = "color";
-  if (label.includes("text") || config.text !== undefined || config.fontSize !== undefined) {
-    mode = "text";
-  } else if (
-    label.includes("image") ||
-    label.includes("icon") ||
-    config.imageUrl !== undefined ||
-    iconName.includes("image")
-  ) {
-    mode = "image";
-  } else {
-    mode = "color";
+  // 1. FLASH COUNT GAME
+  if (expId === "exp-flash-count" || expName.includes("flash")) {
+    const counts = [3, 4, 5, 3, 4, 5, 6, 4];
+    return {
+      mode: "flash-count" as const,
+      headline: "Flash Count Study",
+      description: "Count the white circular flashes that illuminate in the center. Once the sequence finishes, enter the exact count.",
+      tip: "Stay focused on the center circle. Respond immediately once the count choices appear.",
+      trials: counts.map((count, idx) => ({
+        prompt: "How many flashes appeared?",
+        text: `${count} Flashes`,
+        flashCount: count,
+        type: "mixed" as StimulusType,
+        correctAnswer: String(count),
+        options: ["3", "4", "5", "6"],
+      })),
+    };
   }
 
-  let headline = "Task Instructions";
-  let description = "Identify the font color of the word as quickly and accurately as possible.";
-  let tip = "CRITICAL: Ignore the literal text word. Choose the ink color!";
-  let trials: TrialStimulus[] = [];
-
-  if (mode === "text") {
-    headline = "Lexical & Text Recognition Task";
-    description = "A lexical target word will appear on screen. Identify the target word as rapidly and accurately as possible.";
-    tip = "Focus on the fixation point. Use keyboard shortcuts [1], [2], [3], [4] or click the matching button.";
-
-    const customWord = (config.text as string) || "TARGET";
-    trials = [
-      {
-        prompt: "Identify the Target Word",
-        text: customWord,
-        type: "text",
-        correctAnswer: customWord,
-        options: [customWord, "STIMULUS", "MEMORY", "SIGNAL"],
-      },
-      {
-        prompt: "Identify the Target Word",
-        text: "SYNAPSE",
-        type: "text",
-        correctAnswer: "SYNAPSE",
-        options: ["NEURON", "SYNAPSE", "CORTEX", "AXON"],
-      },
-      {
-        prompt: "Identify the Target Word",
-        text: "VELOCITY",
-        type: "text",
-        correctAnswer: "VELOCITY",
-        options: ["MOMENTUM", "VECTOR", "VELOCITY", "ENERGY"],
-      },
-      {
-        prompt: "Identify the Target Word",
-        text: "COGNITION",
-        type: "text",
-        correctAnswer: "COGNITION",
-        options: ["BEHAVIOR", "PERCEPTION", "ATTENTION", "COGNITION"],
-      },
-      {
-        prompt: "Identify the Target Word",
-        text: "HORIZON",
-        type: "text",
-        correctAnswer: "HORIZON",
-        options: ["HORIZON", "ELEVATION", "AZIMUTH", "ALTITUDE"],
-      },
-      {
-        prompt: "Identify the Target Word",
-        text: "NEURON",
-        type: "text",
-        correctAnswer: "NEURON",
-        options: ["NEURON", "GLIA", "DENDRITE", "SOMA"],
-      },
-      {
-        prompt: "Identify the Target Word",
-        text: "LATENCY",
-        type: "text",
-        correctAnswer: "LATENCY",
-        options: ["PERIOD", "LATENCY", "DURATION", "INTERVAL"],
-      },
-      {
-        prompt: "Identify the Target Word",
-        text: "LUMEN",
-        type: "text",
-        correctAnswer: "LUMEN",
-        options: ["CANDELA", "FLUX", "LUMEN", "PHOTON"],
-      },
-      {
-        prompt: "Identify the Target Word",
-        text: "PRISM",
-        type: "text",
-        correctAnswer: "PRISM",
-        options: ["SPECTRUM", "PRISM", "OPTIC", "REFRACT"],
-      },
-      {
-        prompt: "Identify the Target Word",
-        text: "QUANTUM",
-        type: "text",
-        correctAnswer: "QUANTUM",
-        options: ["ATOMIC", "QUANTUM", "PARTICLE", "FERMION"],
-      },
+  // 2. TONE DETECT (AUDITORY ODDBALL)
+  if (expId === "exp-tone-detect" || expName.includes("tone") || expName.includes("oddball")) {
+    const trialsConfig = [
+      { isOddball: false, freq: 650, ans: "STANDARD TONE" },
+      { isOddball: true, freq: 280, ans: "LOW TONE DETECTED" },
+      { isOddball: false, freq: 650, ans: "STANDARD TONE" },
+      { isOddball: true, freq: 280, ans: "LOW TONE DETECTED" },
+      { isOddball: false, freq: 650, ans: "STANDARD TONE" },
+      { isOddball: false, freq: 650, ans: "STANDARD TONE" },
+      { isOddball: true, freq: 280, ans: "LOW TONE DETECTED" },
+      { isOddball: true, freq: 280, ans: "LOW TONE DETECTED" },
     ];
-  } else if (mode === "image") {
-    headline = "Visual Object & Icon Recognition Task";
-    description = "A visual stimulus icon will be presented on screen. Identify the matching visual object as rapidly and accurately as possible.";
-    tip = "Respond immediately when the visual object appears. Use keys [1], [2], [3], [4] or click the button.";
+    return {
+      mode: "tone-detect" as const,
+      headline: "Tone Detect (Auditory Oddball)",
+      description: "Listen to the auditory pitch pulses. Press SPACE or click [LOW TONE DETECTED] when you detect the rare, lower frequency tone.",
+      tip: "Sound is synthesized via Web Audio API. Visual soundwave pulses are also synchronized on screen.",
+      trials: trialsConfig.map((t, idx) => ({
+        prompt: t.isOddball ? "LOW TONE TRIGGERED — DETECT NOW!" : "Standard Frequency Pulse",
+        text: t.isOddball ? "LOW ODDBALL TONE" : "Standard Tone",
+        toneFrequency: t.freq,
+        isOddball: t.isOddball,
+        type: "mixed" as StimulusType,
+        correctAnswer: t.ans,
+        options: ["LOW TONE DETECTED", "STANDARD TONE"],
+      })),
+    };
+  }
 
-    trials = [
-      {
-        prompt: "Identify the Visual Icon",
-        text: "LIGHTNING",
-        type: "image",
-        iconName: "Zap",
-        iconColor: "#F59E0B",
-        imageUrl: config.imageUrl,
-        correctAnswer: "LIGHTNING",
-        options: ["LIGHTNING", "TARGET", "DIAMOND", "SHIELD"],
-      },
-      {
-        prompt: "Identify the Visual Icon",
-        text: "TARGET",
-        type: "image",
+  // 3. VISUAL SEARCH GAME
+  if (expId === "exp-visual-search" || expName.includes("search")) {
+    const quadrants = ["Top-Left", "Top-Right", "Bottom-Left", "Bottom-Right"];
+    const targets = ["Top-Left", "Bottom-Right", "Top-Right", "Bottom-Left", "Top-Left", "Bottom-Right", "Top-Right", "Bottom-Left"];
+    return {
+      mode: "visual-search" as const,
+      headline: "Visual Search Task",
+      description: "Locate the unique TARGET icon (Green Circle) hidden among surrounding distractor icons as rapidly as possible.",
+      tip: "Identify the quadrant where the target appears and click the matching button.",
+      trials: targets.map((quad, idx) => ({
+        prompt: `Find the Target Icon among distractors`,
+        text: `Target in ${quad}`,
+        targetPosition: quad,
+        type: "image" as StimulusType,
+        correctAnswer: quad,
+        options: quadrants,
         iconName: "Target",
-        iconColor: "#EF4444",
-        correctAnswer: "TARGET",
-        options: ["STAR", "TARGET", "HEXAGON", "SHIELD"],
-      },
-      {
-        prompt: "Identify the Visual Icon",
-        text: "DIAMOND",
-        type: "image",
-        iconName: "Diamond",
-        iconColor: "#3B82F6",
-        correctAnswer: "DIAMOND",
-        options: ["CIRCLE", "DIAMOND", "FLAME", "LIGHTNING"],
-      },
-      {
-        prompt: "Identify the Visual Icon",
-        text: "SHIELD",
-        type: "image",
-        iconName: "Shield",
-        iconColor: "#22C55E",
-        correctAnswer: "SHIELD",
-        options: ["STAR", "LIGHTNING", "SHIELD", "TARGET"],
-      },
-      {
-        prompt: "Identify the Visual Icon",
-        text: "STAR",
-        type: "image",
-        iconName: "Star",
-        iconColor: "#FBBF24",
-        correctAnswer: "STAR",
-        options: ["STAR", "DIAMOND", "HEXAGON", "TARGET"],
-      },
-      {
-        prompt: "Identify the Visual Icon",
-        text: "FLAME",
-        type: "image",
-        iconName: "Flame",
-        iconColor: "#F97316",
-        correctAnswer: "FLAME",
-        options: ["LIGHTNING", "FLAME", "STAR", "SHIELD"],
-      },
-      {
-        prompt: "Identify the Visual Icon",
-        text: "EYE",
-        type: "image",
-        iconName: "Eye",
-        iconColor: "#8B5CF6",
-        correctAnswer: "EYE",
-        options: ["EYE", "DIAMOND", "SHIELD", "TARGET"],
-      },
-      {
-        prompt: "Identify the Visual Icon",
-        text: "COMPASS",
-        type: "image",
-        iconName: "Compass",
-        iconColor: "#06B6D4",
-        correctAnswer: "COMPASS",
-        options: ["TARGET", "COMPASS", "STAR", "LIGHTNING"],
-      },
-      {
-        prompt: "Identify the Visual Icon",
-        text: "CHIP",
-        type: "image",
-        iconName: "Cpu",
         iconColor: "#10B981",
-        correctAnswer: "CHIP",
-        options: ["CHIP", "SHIELD", "DIAMOND", "EYE"],
-      },
-      {
-        prompt: "Identify the Visual Icon",
-        text: "SPARK",
-        type: "image",
-        iconName: "Sparkles",
-        iconColor: "#EC4899",
-        correctAnswer: "SPARK",
-        options: ["LIGHTNING", "SPARK", "STAR", "DIAMOND"],
-      },
+      })),
+    };
+  }
+
+  // 4. OBJECT HUNT GAME
+  if (expId === "exp-object-hunt" || expName.includes("object")) {
+    const objectList = [
+      { name: "Diamond", icon: "Diamond", color: "#EC4899" },
+      { name: "Compass", icon: "Compass", color: "#38BDF8" },
+      { name: "Flame", icon: "Flame", color: "#F59E0B" },
+      { name: "Shield", icon: "Shield", color: "#10B981" },
+      { name: "Star", icon: "Star", color: "#EAB308" },
+      { name: "Eye", icon: "Eye", color: "#8B5CF6" },
+      { name: "Cpu", icon: "Cpu", color: "#06B6D4" },
+      { name: "Zap", icon: "Zap", color: "#F43F5E" },
     ];
-  } else {
-    // Stroop Color Discrimination
-    trials = [
+    return {
+      mode: "object-hunt" as const,
+      headline: "Object Hunt Protocol",
+      description: "A target object symbol will be requested. Identify the matching icon from the choices as rapidly as possible.",
+      tip: "Use keyboard shortcuts [1], [2], [3], [4] or click the matching object icon.",
+      trials: objectList.map((obj, idx) => {
+        const otherOptions = objectList.filter((o) => o.name !== obj.name).slice(0, 3).map((o) => o.name);
+        const options = [obj.name, ...otherOptions].sort(() => 0.5 - Math.random());
+        return {
+          prompt: `Locate Target Symbol: ${obj.name.toUpperCase()}`,
+          text: obj.name,
+          iconName: obj.icon,
+          iconColor: obj.color,
+          type: "image" as StimulusType,
+          correctAnswer: obj.name,
+          options,
+        };
+      }),
+    };
+  }
+
+  // 5. COLOR WORD (STROOP) OR DEFAULT
+  return {
+    mode: "color" as const,
+    headline: "Chromatic Stroop Conflict Task",
+    description: "Identify the font ink color of the word as quickly and accurately as possible. Ignore the literal text!",
+    tip: "CRITICAL: Choose the INK COLOR, not what the word reads.",
+    trials: [
       {
-        prompt: "Identify the font ink color",
-        text: "RED",
-        colorName: "RED",
-        colorHex: "#EF4444",
-        rule: "match_color",
-        type: "color",
-        congruent: true,
-        correctAnswer: "RED",
-        options: ["RED", "BLUE", "GREEN", "YELLOW"],
-      },
-      {
-        prompt: "Identify the font ink color",
+        prompt: "Identify the font ink color (Ignore the text!)",
         text: "BLUE",
-        colorName: "BLUE",
-        colorHex: "#3B82F6",
-        rule: "match_color",
-        type: "color",
-        congruent: true,
-        correctAnswer: "BLUE",
-        options: ["RED", "BLUE", "GREEN", "YELLOW"],
-      },
-      {
-        prompt: "Identify the font ink color (Ignore the text!)",
-        text: "GREEN",
         colorName: "RED",
         colorHex: "#EF4444",
-        rule: "match_color",
-        type: "mixed",
+        type: "color" as StimulusType,
         congruent: false,
         correctAnswer: "RED",
         options: ["RED", "BLUE", "GREEN", "YELLOW"],
       },
       {
-        prompt: "Identify the font ink color",
-        text: "YELLOW",
-        colorName: "YELLOW",
-        colorHex: "#F59E0B",
-        rule: "match_color",
-        type: "color",
-        congruent: true,
-        correctAnswer: "YELLOW",
-        options: ["RED", "BLUE", "GREEN", "YELLOW"],
-      },
-      {
         prompt: "Identify the font ink color (Ignore the text!)",
-        text: "YELLOW",
-        colorName: "BLUE",
-        colorHex: "#3B82F6",
-        rule: "match_color",
-        type: "mixed",
-        congruent: false,
-        correctAnswer: "BLUE",
-        options: ["RED", "BLUE", "GREEN", "YELLOW"],
-      },
-      {
-        prompt: "Identify the font ink color",
         text: "GREEN",
         colorName: "GREEN",
         colorHex: "#22C55E",
-        rule: "match_color",
-        type: "color",
+        type: "color" as StimulusType,
         congruent: true,
         correctAnswer: "GREEN",
         options: ["RED", "BLUE", "GREEN", "YELLOW"],
@@ -380,10 +267,29 @@ function resolveExperimentFlow(experiment: Experiment) {
       {
         prompt: "Identify the font ink color (Ignore the text!)",
         text: "RED",
+        colorName: "BLUE",
+        colorHex: "#3B82F6",
+        type: "color" as StimulusType,
+        congruent: false,
+        correctAnswer: "BLUE",
+        options: ["RED", "BLUE", "GREEN", "YELLOW"],
+      },
+      {
+        prompt: "Identify the font ink color (Ignore the text!)",
+        text: "YELLOW",
+        colorName: "YELLOW",
+        colorHex: "#F59E0B",
+        type: "color" as StimulusType,
+        congruent: true,
+        correctAnswer: "YELLOW",
+        options: ["RED", "BLUE", "GREEN", "YELLOW"],
+      },
+      {
+        prompt: "Identify the font ink color (Ignore the text!)",
+        text: "RED",
         colorName: "GREEN",
         colorHex: "#22C55E",
-        rule: "match_color",
-        type: "color",
+        type: "color" as StimulusType,
         congruent: false,
         correctAnswer: "GREEN",
         options: ["RED", "BLUE", "GREEN", "YELLOW"],
@@ -393,8 +299,7 @@ function resolveExperimentFlow(experiment: Experiment) {
         text: "BLUE",
         colorName: "YELLOW",
         colorHex: "#F59E0B",
-        rule: "match_color",
-        type: "color",
+        type: "color" as StimulusType,
         congruent: false,
         correctAnswer: "YELLOW",
         options: ["RED", "BLUE", "GREEN", "YELLOW"],
@@ -404,8 +309,7 @@ function resolveExperimentFlow(experiment: Experiment) {
         text: "RED",
         colorName: "BLUE",
         colorHex: "#3B82F6",
-        rule: "match_color",
-        type: "mixed",
+        type: "mixed" as StimulusType,
         congruent: false,
         correctAnswer: "BLUE",
         options: ["RED", "BLUE", "GREEN", "YELLOW"],
@@ -415,24 +319,14 @@ function resolveExperimentFlow(experiment: Experiment) {
         text: "GREEN",
         colorName: "YELLOW",
         colorHex: "#F59E0B",
-        rule: "match_color",
-        type: "mixed",
+        type: "mixed" as StimulusType,
         congruent: false,
         correctAnswer: "YELLOW",
         options: ["RED", "BLUE", "GREEN", "YELLOW"],
       },
-    ];
-  }
-
-  return { mode, headline, description, tip, trials, activeNode, config };
+    ],
+  };
 }
-
-const COLOR_BUTTONS = [
-  { label: "RED", key: "1", colorHex: "#EF4444", bgClass: "hover:bg-[#EF4444]/20 border-[#EF4444]/40" },
-  { label: "BLUE", key: "2", colorHex: "#3B82F6", bgClass: "hover:bg-[#3B82F6]/20 border-[#3B82F6]/40" },
-  { label: "GREEN", key: "3", colorHex: "#22C55E", bgClass: "hover:bg-[#22C55E]/20 border-[#22C55E]/40" },
-  { label: "YELLOW", key: "4", colorHex: "#F59E0B", bgClass: "hover:bg-[#F59E0B]/20 border-[#F59E0B]/40" },
-];
 
 export function ParticipantRuntime({
   experiment,
@@ -447,6 +341,16 @@ export function ParticipantRuntime({
   const [results, setResults] = useState<TrialResult[]>([]);
   const [lastFeedback, setLastFeedback] = useState<{ correct: boolean; rt: number } | null>(null);
 
+  // Flash animation state for Flash Count game
+  const [flashTick, setFlashTick] = useState(0);
+  const [flashingActive, setFlashingActive] = useState(false);
+
+  // Tone soundwave state for Tone Detect
+  const [tonePulse, setTonePulse] = useState(false);
+
+  const timerRef = useRef(createTrialTimer());
+  const trialActiveRef = useRef(false);
+
   // Sync participantName if user changes
   useEffect(() => {
     if (user?.displayName) {
@@ -454,26 +358,81 @@ export function ParticipantRuntime({
     }
   }, [user?.displayName]);
 
-  const timerRef = useRef(createTrialTimer());
-  const trialActiveRef = useRef(false);
+  // =========================================================================
+  // CENTRALIZED PUBLISHING GATE CHECK:
+  // If experiment is NOT published, participant access MUST be blocked!
+  // =========================================================================
+  if (!experiment || experiment.status !== "published") {
+    return (
+      <div className="min-h-screen bg-[#05060A] text-white flex flex-col items-center justify-center p-6 text-center select-none">
+        <div className="max-w-md w-full p-8 rounded-3xl bg-[#0D111A] border border-amber-500/30 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto shadow-lg">
+            <ShieldAlert className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold tracking-tight text-white">This study is currently unavailable</h2>
+            <p className="text-xs text-[#A5ADBD] leading-relaxed">
+              The research investigator has removed, unpublished, or set this experiment to disabled status. Participant trial telemetry is temporarily blocked.
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 font-mono text-[11px] text-[#697386]">
+            Study Name: <span className="text-white font-semibold">{experiment?.name || "Experiment"}</span> · Status:{" "}
+            <span className="uppercase text-amber-400 font-bold">{experiment?.status || "Disabled / Removed"}</span>
+          </div>
+          <div className="pt-2">
+            <Link href="/participant/dashboard">
+              <Button variant="glow" size="md" className="w-full justify-center">
+                Return to Available Studies
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const flow = React.useMemo(() => resolveExperimentFlow(experiment), [experiment]);
   const activeTrials = flow.trials;
-  const totalTrials = Math.min(experiment.trialCount || 10, activeTrials.length);
+  const totalTrials = Math.min(experiment.trialCount || 8, activeTrials.length);
   const currentStimulus = activeTrials[currentTrialIdx] || activeTrials[0];
 
   // Start trial with fixation cross
   const launchTrial = useCallback((trialIdx: number) => {
     setStage("fixation");
     trialActiveRef.current = false;
+    setFlashingActive(false);
 
     // Brief fixation cross (350ms) to center gaze
     setTimeout(() => {
       setStage("trial");
       timerRef.current.start();
       trialActiveRef.current = true;
+
+      const stim = activeTrials[trialIdx] || activeTrials[0];
+
+      // Handle Flash Count animation
+      if (flow.mode === "flash-count" && stim.flashCount) {
+        setFlashingActive(true);
+        let count = 0;
+        const total = stim.flashCount;
+        const interval = setInterval(() => {
+          count++;
+          setFlashTick((prev) => prev + 1);
+          if (count >= total) {
+            clearInterval(interval);
+            setTimeout(() => setFlashingActive(false), 200);
+          }
+        }, 320);
+      }
+
+      // Handle Tone Detect audio trigger
+      if (flow.mode === "tone-detect") {
+        setTonePulse(true);
+        playAudioTone(stim.toneFrequency || 650, 220);
+        setTimeout(() => setTonePulse(false), 250);
+      }
     }, 380);
-  }, []);
+  }, [activeTrials, flow.mode]);
 
   // Record response via performance.now()
   const handleResponse = useCallback(
@@ -487,7 +446,7 @@ export function ParticipantRuntime({
 
       const recordedTrial: TrialResult = {
         id: `trial-live-${currentTrialIdx + 1}`,
-        participantId: "pending",
+        participantId: user?.id || "part-anon",
         experimentId: experiment.id,
         trialNumber: currentTrialIdx + 1,
         stimulusType: stim.type,
@@ -514,25 +473,21 @@ export function ParticipantRuntime({
 
       // Move to next trial or finish
       if (currentTrialIdx + 1 < totalTrials) {
-        // Very brief feedback display (250ms) without contaminating RT
         setStage("feedback");
         setTimeout(() => {
           setCurrentTrialIdx((prev) => prev + 1);
           launchTrial(currentTrialIdx + 1);
         }, 320);
       } else {
-        // Complete study
         setStage("completed");
-        // Submit trial run to mock storage / API linked to active user ID
         trialService.submitTrialRun(participantName, nextResults, user?.id).catch(console.error);
 
-        // Confetti celebration
         try {
           confetti({
             particleCount: 80,
             spread: 70,
             origin: { y: 0.6 },
-            colors: ["#4F8CFF", "#8B5CF6", "#22D3EE", "#22C55E"],
+            colors: ["#10B981", "#4F8CFF", "#38BDF8", "#F59E0B"],
           });
         } catch {}
       }
@@ -540,34 +495,34 @@ export function ParticipantRuntime({
     [activeTrials, currentTrialIdx, experiment.id, launchTrial, participantName, results, stage, totalTrials, user?.id]
   );
 
-  // Keyboard navigation for keys 1, 2, 3, 4 or R, G, B, Y
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (stage !== "trial" || !trialActiveRef.current) return;
 
       const key = e.key.toUpperCase();
       const options = currentStimulus?.options || [];
-      if (key === "1" && options[0]) {
-        handleResponse(options[0], "keyboard");
-      } else if (key === "2" && options[1]) {
-        handleResponse(options[1], "keyboard");
-      } else if (key === "3" && options[2]) {
-        handleResponse(options[2], "keyboard");
-      } else if (key === "4" && options[3]) {
-        handleResponse(options[3], "keyboard");
-      } else if (flow.mode === "color") {
-        if (key === "R") handleResponse("RED", "keyboard");
-        else if (key === "B") handleResponse("BLUE", "keyboard");
-        else if (key === "G") handleResponse("GREEN", "keyboard");
-        else if (key === "Y") handleResponse("YELLOW", "keyboard");
+
+      // Space key for Tone Detect
+      if (flow.mode === "tone-detect" && e.code === "Space") {
+        e.preventDefault();
+        handleResponse("LOW TONE DETECTED", "keyboard");
+        return;
       }
+
+      // Keys 1, 2, 3, 4
+      if (key === "1" && options[0]) handleResponse(options[0], "keyboard");
+      else if (key === "2" && options[1]) handleResponse(options[1], "keyboard");
+      else if (key === "3" && options[2]) handleResponse(options[2], "keyboard");
+      else if (key === "4" && options[3]) handleResponse(options[3], "keyboard");
+      else if (key === "5" && options[4]) handleResponse(options[4], "keyboard");
+      else if (key === "6" && options[5]) handleResponse(options[5], "keyboard");
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentStimulus?.options, flow.mode, handleResponse, stage]);
 
-  // Restart demo run
   const handleRestart = () => {
     setResults([]);
     setCurrentTrialIdx(0);
@@ -575,7 +530,6 @@ export function ParticipantRuntime({
     setStage("instructions");
   };
 
-  // Completed metrics
   const accuracy = results.length > 0 ? (results.filter((r) => r.correct).length / results.length) * 100 : 0;
   const rts = results.map((r) => r.reactionTimeMs);
   const avgRt = rts.length > 0 ? Math.round(rts.reduce((a, b) => a + b, 0) / rts.length) : 0;
@@ -587,9 +541,9 @@ export function ParticipantRuntime({
       {/* Minimal Header */}
       <div className="h-12 border-b border-white/[0.06] px-6 flex items-center justify-between text-xs text-[#697386]">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#22C55E] animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
           <span className="font-mono uppercase tracking-wider">
-            {isPreview ? "PREVIEW RUNTIME" : "COGNITIVELAB SESSION"}
+            {isPreview ? "COGNITIVELAB RUNTIME" : "SESSION RUNTIME"}
           </span>
           <span className="text-[#A5ADBD]">•</span>
           <span className="text-white font-medium">{experiment.name}</span>
@@ -601,7 +555,7 @@ export function ParticipantRuntime({
           </div>
         ) : (
           <Link
-            href="/builder"
+            href={isParticipant ? "/participant/dashboard" : "/dashboard"}
             className="text-xs text-[#A5ADBD] hover:text-white underline font-mono"
           >
             Exit Runtime
@@ -612,18 +566,18 @@ export function ParticipantRuntime({
       {/* Main Focus Area */}
       <main className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-xl text-center">
-          {/* STAGE 1: CONSENT */}
+          {/* STAGE 1: CONSENT & DEMOGRAPHIC BRIEFING */}
           {stage === "consent" && (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
-              <div className="w-14 h-14 rounded-2xl bg-[#4F8CFF]/10 border border-[#4F8CFF]/30 text-[#4F8CFF] flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(79,140,255,0.2)]">
+              <div className="w-14 h-14 rounded-2xl bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(16,185,129,0.2)]">
                 <Shield className="w-7 h-7" />
               </div>
               <div className="space-y-2">
                 <h1 className="text-2xl font-bold tracking-tight text-white">
-                  Informed Participant Briefing
+                  {experiment.name}
                 </h1>
                 <p className="text-xs text-[#A5ADBD] leading-relaxed max-w-md mx-auto">
-                  You are participating in a behavioral measurement study evaluating visual-motor reaction time and cognitive inhibition under Stroop interference.
+                  {experiment.description}
                 </p>
               </div>
 
@@ -631,7 +585,7 @@ export function ParticipantRuntime({
                 <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 mb-2">
                   <span className="font-semibold text-white">Participant Demographics:</span>
                   <span className="text-[11px] font-mono text-[#34D399] bg-[#10B981]/10 px-2 py-0.5 rounded border border-[#10B981]/30">
-                    Age {user?.age ?? "—"} · {user?.ageGroup} Cohort
+                    Age {user?.age ?? "—"} · {user?.ageGroup || "Demographic Cohort"}
                   </span>
                 </div>
                 <p className="font-semibold text-white">Session Telemetry Guidelines:</p>
@@ -665,14 +619,8 @@ export function ParticipantRuntime({
           {/* STAGE 2: INSTRUCTIONS */}
           {stage === "instructions" && (
             <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
-              <div className="w-14 h-14 rounded-2xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 text-[#8B5CF6] flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(139,92,246,0.2)]">
-                {flow.mode === "image" ? (
-                  <Zap className="w-7 h-7" />
-                ) : flow.mode === "text" ? (
-                  <Target className="w-7 h-7" />
-                ) : (
-                  <Zap className="w-7 h-7" />
-                )}
+              <div className="w-14 h-14 rounded-2xl bg-[#4F8CFF]/10 border border-[#4F8CFF]/30 text-[#4F8CFF] flex items-center justify-center mx-auto shadow-[0_0_20px_rgba(79,140,255,0.2)]">
+                <Play className="w-7 h-7 fill-current" />
               </div>
               <div className="space-y-2">
                 <h1 className="text-2xl font-bold tracking-tight text-white">
@@ -684,38 +632,6 @@ export function ParticipantRuntime({
                 <p className="text-xs text-[#F59E0B] font-mono">
                   {flow.tip}
                 </p>
-              </div>
-
-              {/* Sample illustration */}
-              <div className="p-6 rounded-2xl bg-[#0A0D14] border border-white/10 flex flex-col items-center gap-3">
-                <span className="text-xs text-[#697386] font-mono uppercase">Example Stimulus</span>
-                {flow.mode === "image" ? (
-                  <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center shadow-lg">
-                    <Zap className="w-10 h-10 text-[#F59E0B] drop-shadow-[0_0_15px_#F59E0B]" />
-                  </div>
-                ) : flow.mode === "text" ? (
-                  <span className="text-4xl font-black font-mono tracking-widest text-white drop-shadow-[0_0_20px_rgba(255,255,255,0.6)]">
-                    {flow.trials[0]?.text || "TARGET"}
-                  </span>
-                ) : (
-                  <span className="text-4xl font-black font-sans tracking-wide text-[#3B82F6]">
-                    RED
-                  </span>
-                )}
-
-                <span className="text-xs text-[#22C55E] font-medium">
-                  {flow.mode === "color" ? (
-                    <>Correct Answer: <strong className="text-white">BLUE</strong> (because ink is blue)</>
-                  ) : flow.mode === "image" ? (
-                    <>Action: Press <strong className="text-white">[1]</strong> or click <strong className="text-white">LIGHTNING</strong></>
-                  ) : (
-                    <>Action: Press <strong className="text-white">[1]</strong> or select <strong className="text-white">{flow.trials[0]?.text || "TARGET"}</strong></>
-                  )}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-lg bg-white/[0.02] border border-white/10 text-xs text-[#A5ADBD] font-mono">
-                Keyboard shortcuts enabled: <strong className="text-white">1, 2, 3, 4</strong>
               </div>
 
               <Button
@@ -736,84 +652,132 @@ export function ParticipantRuntime({
             </div>
           )}
 
-          {/* STAGE 4: TRIAL ACTIVE (DISTRACTION-FREE, NO HEAVY TRANSITIONS) */}
+          {/* STAGE 4: TRIAL ACTIVE */}
           {stage === "trial" && (
             <div className="space-y-8">
               <div className="text-xs font-mono text-[#697386] uppercase tracking-wider">
                 {currentStimulus.prompt}
               </div>
 
-              {/* Central Target Stimulus */}
+              {/* Central Target Display for each game */}
               <div className="h-44 flex items-center justify-center">
-                {flow.mode === "image" ? (
+                {/* Flash Count Game Display */}
+                {flow.mode === "flash-count" && (
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    {flashingActive ? (
+                      <div className="w-24 h-24 rounded-full bg-white shadow-[0_0_50px_#FFFFFF] animate-ping" />
+                    ) : (
+                      <div className="w-28 h-28 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center">
+                        <span className="text-3xl font-black font-mono text-white">?</span>
+                      </div>
+                    )}
+                    <span className="text-xs font-mono text-[#697386]">
+                      {flashingActive ? "Counting flashes..." : "Enter your count below"}
+                    </span>
+                  </div>
+                )}
+
+                {/* Tone Detect Display */}
+                {flow.mode === "tone-detect" && (
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <div
+                      className={`w-28 h-28 rounded-3xl border-2 flex items-center justify-center transition-all ${
+                        tonePulse
+                          ? "bg-[#8B5CF6]/30 border-[#8B5CF6] scale-110 shadow-[0_0_40px_rgba(139,92,246,0.6)]"
+                          : "bg-white/[0.03] border-white/10"
+                      }`}
+                    >
+                      <Volume2 className={`w-12 h-12 ${tonePulse ? "text-[#C084FC]" : "text-[#A5ADBD]"}`} />
+                    </div>
+                    <span className="text-xs font-mono text-[#A5ADBD]">
+                      Press <strong className="text-white">SPACE</strong> or click below when you hear the LOW tone
+                    </span>
+                  </div>
+                )}
+
+                {/* Visual Search Display */}
+                {flow.mode === "visual-search" && (
+                  <div className="w-64 h-40 p-3 rounded-2xl bg-white/[0.02] border border-white/10 grid grid-cols-2 gap-2">
+                    {["Top-Left", "Top-Right", "Bottom-Left", "Bottom-Right"].map((quad) => {
+                      const isTarget = quad === currentStimulus.targetPosition;
+                      return (
+                        <div
+                          key={quad}
+                          onClick={() => handleResponse(quad, "button")}
+                          className={`rounded-xl border flex items-center justify-center cursor-pointer transition-all ${
+                            isTarget
+                              ? "bg-[#10B981]/20 border-[#10B981] hover:scale-105"
+                              : "bg-white/[0.03] border-white/5 hover:bg-white/10"
+                          }`}
+                        >
+                          {isTarget ? (
+                            <Target className="w-8 h-8 text-[#10B981]" />
+                          ) : (
+                            <div className="w-4 h-4 rounded-full bg-blue-500/40" />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Object Hunt Display */}
+                {flow.mode === "object-hunt" && (
                   <div className="w-36 h-36 rounded-3xl bg-[#0D111A] border-2 border-[#4F8CFF]/30 shadow-[0_0_35px_rgba(79,140,255,0.25)] flex items-center justify-center animate-in zoom-in-95 duration-100">
                     {renderVisualStimulus(currentStimulus.iconName, currentStimulus.iconColor, currentStimulus.imageUrl)}
                   </div>
-                ) : flow.mode === "text" ? (
-                  <div className="px-8 py-5 rounded-2xl bg-white/[0.03] border border-white/10 shadow-[0_0_30px_rgba(255,255,255,0.15)] animate-in zoom-in-95 duration-100">
-                    <span className="text-5xl sm:text-6xl font-black tracking-widest text-white font-mono drop-shadow-[0_0_25px_rgba(255,255,255,0.5)]">
-                      {currentStimulus.text}
-                    </span>
-                  </div>
-                ) : (
+                )}
+
+                {/* Color Word (Stroop) Display */}
+                {flow.mode === "color" && (
                   <div
                     className="text-6xl sm:text-7xl font-black tracking-wider transition-none font-sans drop-shadow-[0_0_20px_currentColor]"
-                    style={{ color: currentStimulus.colorHex }}
+                    style={{ color: currentStimulus.colorHex || "#3B82F6" }}
                   >
                     {currentStimulus.text}
                   </div>
                 )}
               </div>
 
-              {/* Response Options */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-lg mx-auto">
-                {(currentStimulus.options || []).map((btnLabel, idx) => {
-                  const colorBtn = COLOR_BUTTONS.find((b) => b.label === btnLabel);
-                  const keyNum = String(idx + 1);
-                  return (
-                    <button
-                      key={btnLabel}
-                      onClick={() => handleResponse(btnLabel, "button")}
-                      className={`py-3.5 px-4 rounded-xl border bg-[#10141D] text-white font-bold text-sm tracking-wide transition-all duration-75 active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg hover:border-[#4F8CFF]/60 hover:bg-[#4F8CFF]/15 ${
-                        colorBtn ? colorBtn.bgClass : "border-white/10"
-                      }`}
-                    >
-                      <span style={{ color: colorBtn ? colorBtn.colorHex : "#FFFFFF" }}>{btnLabel}</span>
-                      <span className="text-[10px] font-mono text-[#697386]">[{keyNum}]</span>
-                    </button>
-                  );
-                })}
+              {/* Response Options Buttons */}
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                {currentStimulus.options.map((opt, idx) => (
+                  <button
+                    key={opt}
+                    onClick={() => handleResponse(opt, "button")}
+                    className="px-5 py-3 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] border border-white/15 text-white font-mono text-xs sm:text-sm font-bold shadow-lg hover:scale-105 active:scale-95 transition-all"
+                  >
+                    <span className="text-[#697386] mr-2">[{idx + 1}]</span>
+                    <span>{opt}</span>
+                  </button>
+                ))}
               </div>
             </div>
           )}
 
-          {/* STAGE 5: VERY BRIEF FEEDBACK */}
+          {/* STAGE 5: FEEDBACK */}
           {stage === "feedback" && lastFeedback && (
-            <div className="flex flex-col items-center justify-center h-48 space-y-2">
-              <div
-                className={`text-2xl font-bold font-mono ${
-                  lastFeedback.correct ? "text-[#22C55E]" : "text-[#EF4444]"
-                }`}
-              >
-                {lastFeedback.correct ? "CORRECT" : "INCORRECT"}
-              </div>
-              <div className="text-xs text-[#A5ADBD] font-mono">
-                {Math.round(lastFeedback.rt)} ms
-              </div>
+            <div className="flex flex-col items-center justify-center h-48 space-y-2 animate-in fade-in duration-100">
+              <span className={`text-2xl font-bold font-mono ${lastFeedback.correct ? "text-[#22C55E]" : "text-[#EF4444]"}`}>
+                {lastFeedback.correct ? "✓ Correct" : "✗ Error"}
+              </span>
+              <span className="text-xs font-mono text-[#A5ADBD]">
+                {lastFeedback.rt} ms
+              </span>
             </div>
           )}
 
           {/* STAGE 6: COMPLETED */}
           {stage === "completed" && (
-            <div className="space-y-6 animate-in fade-in zoom-in-95 duration-300">
-              <div className="w-16 h-16 rounded-2xl bg-[#22C55E]/15 border border-[#22C55E]/30 text-[#22C55E] flex items-center justify-center mx-auto shadow-[0_0_25px_rgba(34,197,94,0.3)]">
+            <div className="space-y-6 animate-in fade-in zoom-in-95 duration-200">
+              <div className="w-16 h-16 rounded-full bg-[#10B981]/20 border border-[#10B981]/40 text-[#34D399] flex items-center justify-center mx-auto shadow-[0_0_30px_rgba(16,185,129,0.3)]">
                 <CheckCircle className="w-8 h-8" />
               </div>
 
               <div className="space-y-1">
-                <h1 className="text-2xl font-bold tracking-tight text-white">
-                  Experiment Complete
-                </h1>
+                <h2 className="text-2xl font-bold tracking-tight text-white">
+                  Study Protocol Completed
+                </h2>
                 <p className="text-xs text-[#A5ADBD] font-mono">
                   All {totalTrials} trials successfully serialized to telemetry stream.
                 </p>
@@ -872,9 +836,9 @@ export function ParticipantRuntime({
                         View in My Dashboard
                       </Button>
                     </Link>
-                    <Link href={`/participant/results/${experiment.id}`}>
+                    <Link href="/participant/personal-bests">
                       <Button variant="ghost" size="md">
-                        Trial Breakdown
+                        Personal Bests
                       </Button>
                     </Link>
                   </>
@@ -889,9 +853,9 @@ export function ParticipantRuntime({
                         View in Age Analytics
                       </Button>
                     </Link>
-                    <Link href="/dashboard">
+                    <Link href="/experiments">
                       <Button variant="ghost" size="md">
-                        Return to Dashboard
+                        Manage Studies
                       </Button>
                     </Link>
                   </>
@@ -904,7 +868,7 @@ export function ParticipantRuntime({
 
       {/* Minimal Footer */}
       <footer className="h-10 border-t border-white/[0.06] px-6 flex items-center justify-between text-[11px] text-[#697386] font-mono">
-        <span>COGNITIVELAB RUNTIME ENGINE • v2.4</span>
+        <span>COGNITIVELAB RUNTIME ENGINE • v3.0</span>
         <span>LATENCY PRECISION: HIGH RES SUB-MS</span>
       </footer>
     </div>

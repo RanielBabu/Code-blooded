@@ -72,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: `part-${Date.now().toString().slice(-4)}`,
       role: "participant",
       displayName: cred.name.trim(),
+      email: cred.email?.trim() || `${cred.name.trim().toLowerCase().replace(/\s+/g, ".")}@cognitivelab.local`,
       dateOfBirth: cred.dateOfBirth,
       age: ageResult.age,
       sex: cred.sex,
@@ -103,10 +104,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginResearcher = (cred: ResearcherLoginCredentials): { success: boolean; error?: string } => {
-    if (!cred.institutionalId || cred.institutionalId.trim().length === 0) {
-      return { success: false, error: "Enter your researcher or institutional ID." };
-    }
-
     const ageResult = calculateAge(cred.dateOfBirth);
     if (!ageResult.valid) {
       return { success: false, error: ageResult.error };
@@ -117,15 +114,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: false, error: validation.message };
     }
 
+    const instId = cred.institutionalId?.trim() || `RES-${Date.now().toString().slice(-4)}`;
+
     const researcherUser: User = {
       id: `res-${Date.now().toString().slice(-4)}`,
       role: "researcher",
       displayName: cred.name.trim(),
+      email: cred.email?.trim() || `${cred.name.trim().toLowerCase().replace(/\s+/g, ".")}@lab.edu`,
       dateOfBirth: cred.dateOfBirth,
       age: ageResult.age,
       sex: cred.sex,
       ageGroup: ageResult.ageGroup,
-      institutionalId: cred.institutionalId.trim().toUpperCase(),
+      institutionalId: instId.toUpperCase(),
       createdAt: new Date().toISOString(),
       permissions: [
         "own_profile",

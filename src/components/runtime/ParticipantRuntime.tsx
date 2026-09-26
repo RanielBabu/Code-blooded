@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import confetti from "canvas-confetti";
+import { useAuth } from "@/lib/auth/auth-context";
 
 interface ParticipantRuntimeProps {
   experiment: Experiment;
@@ -437,11 +438,21 @@ export function ParticipantRuntime({
   experiment,
   isPreview = false,
 }: ParticipantRuntimeProps) {
+  const { user, isParticipant } = useAuth();
   const [stage, setStage] = useState<Stage>("consent");
   const [currentTrialIdx, setCurrentTrialIdx] = useState(0);
-  const [participantName, setParticipantName] = useState("Researcher Demo Subject");
+  const [participantName, setParticipantName] = useState(
+    user?.displayName || "Participant P-001"
+  );
   const [results, setResults] = useState<TrialResult[]>([]);
   const [lastFeedback, setLastFeedback] = useState<{ correct: boolean; rt: number } | null>(null);
+
+  // Sync participantName if user changes
+  useEffect(() => {
+    if (user?.displayName) {
+      setParticipantName(user.displayName);
+    }
+  }, [user?.displayName]);
 
   const timerRef = useRef(createTrialTimer());
   const trialActiveRef = useRef(false);
@@ -512,8 +523,8 @@ export function ParticipantRuntime({
       } else {
         // Complete study
         setStage("completed");
-        // Submit trial run to mock storage / API
-        trialService.submitTrialRun(participantName, nextResults).catch(console.error);
+        // Submit trial run to mock storage / API linked to active user ID
+        trialService.submitTrialRun(participantName, nextResults, user?.id).catch(console.error);
 
         // Confetti celebration
         try {
@@ -526,7 +537,7 @@ export function ParticipantRuntime({
         } catch {}
       }
     },
-    [activeTrials, currentTrialIdx, experiment.id, launchTrial, participantName, results, stage, totalTrials]
+    [activeTrials, currentTrialIdx, experiment.id, launchTrial, participantName, results, stage, totalTrials, user?.id]
   );
 
   // Keyboard navigation for keys 1, 2, 3, 4 or R, G, B, Y
@@ -617,6 +628,12 @@ export function ParticipantRuntime({
               </div>
 
               <div className="p-4 rounded-xl bg-[#0A0D14] border border-white/10 text-left text-xs text-[#A5ADBD] space-y-2">
+                <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 mb-2">
+                  <span className="font-semibold text-white">Participant Demographics:</span>
+                  <span className="text-[11px] font-mono text-[#34D399] bg-[#10B981]/10 px-2 py-0.5 rounded border border-[#10B981]/30">
+                    Age {user?.age ?? "—"} · {user?.ageGroup} Cohort
+                  </span>
+                </div>
                 <p className="font-semibold text-white">Session Telemetry Guidelines:</p>
                 <ul className="list-disc pl-4 space-y-1">
                   <li>High-resolution timestamps captured via <code className="text-[#4F8CFF]">performance.now()</code></li>
@@ -844,21 +861,41 @@ export function ParticipantRuntime({
                   Run Again
                 </Button>
 
-                <Link href="/analytics">
-                  <Button
-                    variant="glow"
-                    size="md"
-                    leftIcon={<BarChart2 className="w-4 h-4" />}
-                  >
-                    Open Research Analytics
-                  </Button>
-                </Link>
-
-                <Link href="/dashboard">
-                  <Button variant="ghost" size="md">
-                    Return to Dashboard
-                  </Button>
-                </Link>
+                {isParticipant ? (
+                  <>
+                    <Link href="/participant/dashboard">
+                      <Button
+                        variant="glow"
+                        size="md"
+                        leftIcon={<BarChart2 className="w-4 h-4" />}
+                      >
+                        View in My Dashboard
+                      </Button>
+                    </Link>
+                    <Link href={`/participant/results/${experiment.id}`}>
+                      <Button variant="ghost" size="md">
+                        Trial Breakdown
+                      </Button>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/researcher/age-analytics">
+                      <Button
+                        variant="glow"
+                        size="md"
+                        leftIcon={<Sparkles className="w-4 h-4" />}
+                      >
+                        View in Age Analytics
+                      </Button>
+                    </Link>
+                    <Link href="/dashboard">
+                      <Button variant="ghost" size="md">
+                        Return to Dashboard
+                      </Button>
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           )}

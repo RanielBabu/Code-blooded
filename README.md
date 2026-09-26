@@ -13,7 +13,9 @@ Creates experiment in visual no-code builder (@xyflow/react)
     ↓
 Graph compiles to structured JSON schema (Zod validated)
     ↓
-Researcher previews or publishes experiment
+Researcher publishes experiment
+    ↓
+Experiment must be published for participant access (gate check)
     ↓
 Participant opens minimal distraction-free runtime (/run or /preview)
     ↓
@@ -23,6 +25,10 @@ Trials serialize to typed API repository / reactive mock telemetry store
     ↓
 Live research dashboard, psychometric analytics, & performance leaderboard
 ```
+
+### Key Safeguards
+- **Publish Gate**: Experiments that are not explicitly `published` are blocked from participants with a clear "This study is currently unavailable" screen. This prevents accidental data collection on draft or archived experiments.
+- **Capture-Time Validity**: Premature responses, omissions, and outliers are evaluated at capture time and recorded on the trial (`valid`, `rejection`, `rejectionDetail`, `omission`) rather than silently filtered out of aggregates.
 
 ---
 
@@ -111,11 +117,11 @@ Rejection happens at capture time and is **recorded on the trial** (`valid`, `re
 
 | Route | Purpose | Key Capabilities |
 |---|---|---|
-| `/` | **Public Landing Page** | Interactive neural canvas hero, live RT sparkline, 4-stage pipeline, builder preview, architecture. |
+| `/` | **Public Landing Page** | Isometric 3D hero tile, floating pill dock (5 Studies Live, Telemetry, Leaderboard), 4-stage pipeline, no-code builder showcase, 5 game capsules. |
 | `/dashboard` | **Researcher Dashboard** | 5 KPI metric cards with sparklines, central Reaction Time line chart, accuracy bar chart, distribution histogram, live telemetry feed. |
 | `/builder` | **No-Code Experiment Builder** | React Flow node graph, draggable library (Flow, Stimulus, Timing, Response, Measurement, Data), real-time node inspector, undo/redo, syntax-highlighted JSON viewer, publish flow. |
 | `/preview/:id` | **Experiment Preview** | Instant preview using the same runtime engine as live trials. |
-| `/run/:expId/:sessId` | **Participant Runtime** | Minimal, distraction-free, centered, high-contrast; 10-trial Color Response Study with consent, instructions, fixation cross, and completion summary. |
+| `/run/:expId/:sessId` | **Participant Runtime** | Published-experience gate check, distraction-free centered runtime, 5 game capsules (Flash Count, Tone Detect, Visual Search, Color Word, Object Hunt), rAF-anchored stimulus onset, capture-time validity, omission trials. |
 | `/analytics` | **Deep Research Analytics** | 7 psychometric hero metrics, RT over trials with Text/Color/Image series toggles, latency histogram, stimulus comparison, computed research insights, CSV/JSON export. |
 | `/participants` | **Participant Directory** | Cohort management, status badges, average RT, accuracy, and consistency index. |
 | `/participants/:id` | **Individual Profile** | Subject performance timeline, stimulus comparisons, and trial-by-trial millisecond logs. |

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import { Button } from "@/components/ui/Button";
@@ -8,17 +8,15 @@ import { Badge } from "@/components/ui/Badge";
 import { apiConfig } from "@/lib/api/client";
 import { mockStore } from "@/lib/mock/mock-storage";
 import { useToast } from "@/components/ui/Toast";
+import { measureClockResolution, type ClockDiagnostics } from "@/lib/timing";
 import {
   Server,
   Database,
-  Cpu,
   RefreshCw,
   RotateCcw,
-  ShieldCheck,
-  Globe,
-  Sliders,
-  Bell,
   CheckCircle2,
+  Timer,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -27,6 +25,23 @@ export default function SettingsPage() {
   const [latency, setLatency] = useState(apiConfig.simulatedDelayMs);
   const [pingStatus, setPingStatus] = useState<string | null>(null);
   const [isPinging, setIsPinging] = useState(false);
+  const [clock, setClock] = useState<ClockDiagnostics | null>(null);
+
+  /**
+   * Probe the live measurement clock rather than reporting what the config
+   * *intends*. A header can be stripped by a proxy, a CDN, or a dev server, in
+   * which case the clamp silently returns and every reaction time gains 0.1ms
+   * quantization without anything indicating so.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    measureClockResolution().then((d) => {
+      if (!cancelled) setClock(d);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const { success, error: toastError } = useToast();
 
@@ -39,10 +54,19 @@ export default function SettingsPage() {
         setPingStatus("Mock Transport OK (Sub-millisecond Local Store)");
         success("Ping Successful", "Mock storage pipeline is healthy and active.");
       } else {
-        const res = await fetch(`${apiUrl}/health`).catch(() => null);
+        // Probe the app's own health endpoint, which performs a real database
+        // round-trip. An empty `apiUrl` means same-origin, which is the default.
+        const res = await fetch(`${apiUrl}/api/health`).catch(() => null);
         if (res && res.ok) {
-          setPingStatus("Remote REST API Connected");
-          success("Backend Online", "Successfully verified remote API status.");
+          const body = await res.json().catch(() => null);
+          const dbState = body?.data?.database;
+          if (dbState === "reachable") {
+            setPingStatus("Database Connected");
+            success("Backend Online", "PostgreSQL round-trip succeeded.");
+          } else {
+            setPingStatus("Server Up, Database Unreachable");
+            toastError("Connection Warning", "The server responded but the database did not.");
+          }
         } else {
           setPingStatus("Backend Unreachable (Falling back to Mock Mode)");
           toastError("Connection Warning", "Configured API URL is unreachable. System will use mock fallback.");
@@ -216,6 +240,101 @@ export default function SettingsPage() {
               Reset to Factory Defaults
             </Button>
           </div>
+        </GlassPanel>
+
+        {/* Measurement Clock Diagnostics */}
+        <GlassPanel className="p-6 space-y-4">
+          <div className="flex items-center gap-2.5">
+            <Timer className="w-5 h-5 text-[#22D3EE]" />
+            <div>
+              <h3 className="text-sm font-semibold text-white tracking-tight">
+                Measurement Clock Diagnostics
+              </h3>
+              <p className="text-xs text-[#A5ADBD]">
+                Live probe of the clock the runtime measures reaction time with. Reported as
+                observed, not as configured.
+              </p>
+            </div>
+          </div>
+
+          {clock ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3 rounded-xl bg-[#080B11] border border-white/10">
+                  <p className="text-[10px] text-[#697386] uppercase font-mono">Clock Resolution</p>
+                  <p className="text-lg font-bold text-[#22D3EE] font-mono mt-1">
+                    {clock.resolutionMs.toFixed(4)} ms
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-[#080B11] border border-white/10">
+                  <p className="text-[10px] text-[#697386] uppercase font-mono">
+                    Cross-Origin Isolation
+                  </p>
+                  <p
+                    className={`text-lg font-bold font-mono mt-1 ${
+                      clock.crossOriginIsolated ? "text-[#22C55E]" : "text-[#F59E0B]"
+                    }`}
+                  >
+                    {clock.crossOriginIsolated ? "ACTIVE" : "INACTIVE"}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-[#080B11] border border-white/10">
+                  <p className="text-[10px] text-[#697386] uppercase font-mono">Onset Method</p>
+                  <p className="text-lg font-bold text-[#4F8CFF] font-mono mt-1">rAF FRAME</p>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-[#A5ADBD] leading-relaxed">{clock.note}</p>
+
+              {!clock.crossOriginIsolated && (
+                <div className="p-3 rounded-xl bg-[#F59E0B]/[0.06] border border-[#F59E0B]/25 flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-[#F59E0B] shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-[#A5ADBD] leading-relaxed">
+                    The clock is running at the 0.1ms default clamp. This does not make reaction
+                    times wrong, but it adds quantization jitter to every sample. Confirm that{" "}
+                    <code className="text-[#F59E0B]">Cross-Origin-Opener-Policy</code> and{" "}
+                    <code className="text-[#F59E0B]">Cross-Origin-Embedder-Policy</code> from{" "}
+                    <code className="text-[#F59E0B]">next.config.ts</code> are reaching the
+                    browser. A reverse proxy or CDN may be stripping them. Set{" "}
+                    <code className="text-[#F59E0B]">CROSS_ORIGIN_ISOLATION=false</code> only if
+                    you must load cross-origin resources that reject{" "}
+                    <code className="text-[#F59E0B]">credentialless</code>.
+                  </p>
+                </div>
+              )}
+
+              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10">
+                <p className="text-[10px] text-[#697386] uppercase font-mono mb-2">
+                  Accuracy Ceiling
+                </p>
+                <ul className="space-y-1.5 text-[11px] text-[#A5ADBD]">
+                  <li>
+                    <strong className="text-white">Stimulus onset: ±1 frame</strong> — 6.9ms at
+                    144Hz, 16.7ms at 60Hz. Dominant error term. JavaScript on the main thread
+                    cannot observe compositor photon emission, so this is not removable in a
+                    browser.
+                  </li>
+                  <li>
+                    <strong className="text-white">Input hardware: 1–8ms</strong> — wired keyboard
+                    polling; 8–15ms for Bluetooth peripherals.
+                  </li>
+                  <li>
+                    <strong className="text-white">Clock resolution:</strong>{" "}
+                    {clock.crossOriginIsolated ? "0.005ms" : "0.100ms"}, reported above.
+                  </li>
+                  <li>
+                    Laboratory-grade onset measurement requires an external photodiode. Interpret
+                    differences smaller than one frame as noise.
+                  </li>
+                </ul>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-[#697386] font-mono">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              Probing measurement clock…
+            </div>
+          )}
         </GlassPanel>
       </div>
     </DashboardLayout>

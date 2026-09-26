@@ -160,10 +160,13 @@ export const AVAILABLE_NODE_TEMPLATES: NodeTypeDefinition[] = [
     type: "measurementNode",
     label: "Measure Reaction Time",
     category: "measurement",
-    description: "High-precision performance.now() delta logging",
+    description: "rAF-anchored stimulus onset delta logging",
     icon: "Timer",
     color: "#22D3EE",
-    defaultData: { precision: "sub-millisecond", filterOutliers: true, minValidMs: 100 },
+    // minValidMs is ENFORCED at capture time, not decorative. 150ms is the
+    // conventional floor for simple reaction time; samples below it indicate an
+    // anticipatory press and are excluded from aggregates.
+    defaultData: { precision: "0.1ms-grid", filterOutliers: true, minValidMs: 150 },
   },
   {
     type: "measurementNode",

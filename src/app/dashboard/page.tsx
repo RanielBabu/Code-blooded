@@ -151,48 +151,32 @@ export default function DashboardPage() {
 
         <MetricCard
           label="Participants"
-          value={formatNumber(summary?.participantCount || 248)}
+          value={formatNumber(summary?.participantCount)}
           unit="subjects"
-          change="+14.2%"
-          trend="up"
-          trendLabel="vs prior week"
           icon={<Users className="w-4 h-4" />}
           accentColor="violet"
-          sparklineData={[180, 195, 210, 222, 235, 240, 248]}
         />
 
         <MetricCard
           label="Trials Completed"
-          value={formatNumber(summary?.trialCount || 8420)}
+          value={formatNumber(summary?.trialCount)}
           unit="trials"
-          change="+1,240"
-          trend="up"
-          trendLabel="session total"
           icon={<Layers className="w-4 h-4" />}
           accentColor="cyan"
-          sparklineData={[6200, 6800, 7100, 7600, 8000, 8200, 8420]}
         />
 
         <MetricCard
           label="Avg Reaction Time"
-          value={formatMs(summary?.averageReactionTimeMs || 412)}
-          change="-18 ms"
-          trend="up"
-          trendLabel="faster than norm"
+          value={formatMs(summary?.averageReactionTimeMs)}
           icon={<Clock className="w-4 h-4" />}
           accentColor="success"
-          sparklineData={[430, 425, 420, 418, 415, 414, 412]}
         />
 
         <MetricCard
           label="Cohort Accuracy"
-          value={formatPercent(summary?.accuracyPercent || 91.8)}
-          change="+1.4%"
-          trend="up"
-          trendLabel="high fidelity"
+          value={formatPercent(summary?.accuracyPercent)}
           icon={<Target className="w-4 h-4" />}
           accentColor="warning"
-          sparklineData={[89, 90, 90.5, 91, 91.2, 91.5, 91.8]}
         />
       </div>
 
@@ -211,7 +195,7 @@ export default function DashboardPage() {
         <ReactionTimeLineChart
           data={summary?.trialProgression || []}
           showStimulusToggles={true}
-          benchmarkLine={412}
+          benchmarkLine={summary?.medianReactionTimeMs ?? undefined}
         />
       </ChartCard>
 

@@ -161,7 +161,8 @@ export default function LandingPage() {
               <span className="text-[10px] font-mono text-[#697386] uppercase block">Stage 02</span>
               <h3 className="text-base font-semibold text-white mt-1">Participant Runtime</h3>
               <p className="text-xs text-[#A5ADBD] mt-2 leading-relaxed">
-                Distraction-free, high-contrast browser runner with sub-millisecond keyboard and button capture.
+                Distraction-free browser runner with frame-accurate stimulus onset, bounded response
+                windows, and capture-time exclusion of anticipatory and omission trials.
               </p>
             </GlassPanel>
 

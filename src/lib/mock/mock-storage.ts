@@ -154,13 +154,40 @@ class MockStorageStore {
     });
   }
 
+  /**
+   * Trials that passed capture-time validity rules.
+   *
+   * Rejection happens in the runtime and is recorded on the trial, but a
+   * rejected sample must not silently re-enter the aggregates, or the mean and
+   * standard deviation the researcher reports would still be contaminated by
+   * exactly the anticipatory presses and omissions the rules exist to remove.
+   *
+   * Trials with `valid === undefined` are historical records predating validity
+   * tracking and are retained, so previously collected datasets keep their
+   * original meaning instead of silently emptying.
+   */
+  public getAdmissibleTrials(filter?: {
+    experimentId?: string;
+    participantId?: string;
+    stimulusType?: string;
+  }): TrialResult[] {
+    return this.getTrials(filter).filter((t) => t.valid !== false);
+  }
+
   public recordTrialRun(participantName: string, newTrials: TrialResult[]): { participant: Participant; trials: TrialResult[] } {
     this.init();
     const participantId = `part-${Date.now().toString().slice(-4)}`;
     const totalTrials = newTrials.length;
-    const correctCount = newTrials.filter((t) => t.correct).length;
-    const accuracy = totalTrials > 0 ? (correctCount / totalTrials) * 100 : 0;
-    const rts = newTrials.map((t) => t.reactionTimeMs);
+
+    // Participant-level metrics are derived from admissible trials only. An
+    // anticipatory press produces a fast, wrong, meaningless sample; letting it
+    // set this participant's headline average would misrepresent them.
+    const scored = newTrials.filter((t) => t.valid !== false);
+    const excludedCount = totalTrials - scored.length;
+
+    const correctCount = scored.filter((t) => t.correct).length;
+    const accuracy = scored.length > 0 ? (correctCount / scored.length) * 100 : 0;
+    const rts = scored.map((t) => t.reactionTimeMs);
     const avgRt = rts.length > 0 ? Math.round(rts.reduce((a, b) => a + b, 0) / rts.length) : 0;
 
     // Calculate variance / consistency score (0 - 100)
@@ -180,7 +207,10 @@ class MockStorageStore {
       consistencyScore,
       createdAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
-      notes: "Completed interactive live test run in CognitiveLab runtime.",
+      notes:
+        excludedCount > 0
+          ? `Completed interactive live test run. ${excludedCount} of ${totalTrials} trials excluded by capture-time validity rules (premature / timeout / outlier).`
+          : "Completed interactive live test run in CognitiveLab runtime.",
     };
 
     const assignedTrials = newTrials.map((t, idx) => ({
@@ -198,11 +228,11 @@ class MockStorageStore {
       const expId = newTrials[0].experimentId;
       const exp = this.getExperimentById(expId);
       if (exp) {
-        const expTrials = this.trials.filter((t) => t.experimentId === expId);
+        const expTrials = this.getAdmissibleTrials({ experimentId: expId });
         const expParticipants = new Set(expTrials.map((t) => t.participantId)).size;
         const expRt = expTrials.map((t) => t.reactionTimeMs);
         const newAvg = expRt.length > 0 ? Math.round(expRt.reduce((a, b) => a + b, 0) / expRt.length) : exp.stats?.avgReactionTimeMs || 412;
-        const newAcc = (expTrials.filter((t) => t.correct).length / expTrials.length) * 100;
+        const newAcc = expTrials.length > 0 ? (expTrials.filter((t) => t.correct).length / expTrials.length) * 100 : 0;
 
         exp.stats = {
           participants: expParticipants,
@@ -220,7 +250,9 @@ class MockStorageStore {
   // --- ANALYTICS SUMMARY & CALCULATIONS ---
   public getAnalyticsSummary(experimentId?: string, participantId?: string): AnalyticsSummary {
     this.init();
-    const relevantTrials = this.getTrials({ experimentId, participantId });
+    // Admissible-only: aggregates must not be contaminated by samples the
+    // runtime already rejected as premature, timed out, or outlying.
+    const relevantTrials = this.getAdmissibleTrials({ experimentId, participantId });
 
     if (relevantTrials.length === 0) {
       return {
@@ -249,40 +281,61 @@ class MockStorageStore {
     const correctCount = relevantTrials.filter((t) => t.correct).length;
     const accuracyPercent = Math.round((correctCount / relevantTrials.length) * 1000) / 10;
 
-    const variance = rts.reduce((acc, val) => acc + Math.pow(val - avgRt, 2), 0) / rts.length;
-    const stdDev = Math.round(Math.sqrt(variance));
-
-    // Stimulus Breakdown
+    // Per-modality latency and accuracy, derived only from trials that were
+    // actually recorded. A modality with no trials reports null rather than a
+    // synthesised value, matching the database-backed implementation.
     const stimTypes: StimulusType[] = ["text", "color", "image", "mixed"];
     const stimulusBreakdown = stimTypes.map((type) => {
       const typeTrials = relevantTrials.filter((t) => t.stimulusType === type);
       const count = typeTrials.length;
       if (count === 0) {
-        return { type, avgRt: 0, accuracy: 0, count: 0 };
+        return { type, avgRt: null, accuracy: null, count: 0 };
       }
-      const typeAvgRt = Math.round(typeTrials.reduce((a, b) => a + b.reactionTimeMs, 0) / count);
+      const typeAvgRt = Math.round(
+        typeTrials.reduce((a, b) => a + b.reactionTimeMs, 0) / count
+      );
       const typeAcc = Math.round((typeTrials.filter((t) => t.correct).length / count) * 1000) / 10;
       return { type, avgRt: typeAvgRt, accuracy: typeAcc, count };
     });
 
-    // Trial progression (1 to 10)
-    const trialProgression = Array.from({ length: 10 }, (_, i) => {
-      const trialNum = i + 1;
+    const variance = rts.reduce((acc, val) => acc + Math.pow(val - avgRt, 2), 0) / rts.length;
+    const stdDev = Math.round(Math.sqrt(variance));
+
+    // Trial progression, restricted to trial numbers that were actually
+    // collected. The previous version always emitted ten rows and filled the
+    // absent ones with a synthetic `400 - trial * 6` ms curve and a flat 92%
+    // accuracy, which drew a smooth practice curve across trials nobody ran.
+    const observedTrialNumbers = [
+      ...new Set(relevantTrials.map((t) => t.trialNumber)),
+    ].sort((a, b) => a - b);
+
+    const trialProgression = observedTrialNumbers.map((trialNum) => {
       const tAtNum = relevantTrials.filter((t) => t.trialNumber === trialNum);
       const textAtNum = tAtNum.filter((t) => t.stimulusType === "text");
       const colorAtNum = tAtNum.filter((t) => t.stimulusType === "color");
       const imageAtNum = tAtNum.filter((t) => t.stimulusType === "image");
 
-      const avgRtAtNum = tAtNum.length > 0 ? Math.round(tAtNum.reduce((a, b) => a + b.reactionTimeMs, 0) / tAtNum.length) : 0;
-      const accAtNum = tAtNum.length > 0 ? Math.round((tAtNum.filter((t) => t.correct).length / tAtNum.length) * 100) : 100;
+      const avgRtAtNum = Math.round(
+        tAtNum.reduce((a, b) => a + b.reactionTimeMs, 0) / tAtNum.length
+      );
 
       return {
         trial: trialNum,
-        avgRt: avgRtAtNum || (400 - trialNum * 6),
-        accuracy: accAtNum || 92,
-        textRt: textAtNum.length > 0 ? Math.round(textAtNum.reduce((a, b) => a + b.reactionTimeMs, 0) / textAtNum.length) : Math.round(avgRtAtNum * 0.9),
-        colorRt: colorAtNum.length > 0 ? Math.round(colorAtNum.reduce((a, b) => a + b.reactionTimeMs, 0) / colorAtNum.length) : Math.round(avgRtAtNum * 1.05),
-        imageRt: imageAtNum.length > 0 ? Math.round(imageAtNum.reduce((a, b) => a + b.reactionTimeMs, 0) / imageAtNum.length) : Math.round(avgRtAtNum * 1.15),
+        avgRt: avgRtAtNum,
+        accuracy:
+          Math.round((tAtNum.filter((t) => t.correct).length / tAtNum.length) * 1000) / 10,
+        textRt:
+          textAtNum.length > 0
+            ? Math.round(textAtNum.reduce((a, b) => a + b.reactionTimeMs, 0) / textAtNum.length)
+            : null,
+        colorRt:
+          colorAtNum.length > 0
+            ? Math.round(colorAtNum.reduce((a, b) => a + b.reactionTimeMs, 0) / colorAtNum.length)
+            : null,
+        imageRt:
+          imageAtNum.length > 0
+            ? Math.round(imageAtNum.reduce((a, b) => a + b.reactionTimeMs, 0) / imageAtNum.length)
+            : null,
       };
     });
 
@@ -330,15 +383,20 @@ class MockStorageStore {
     const insights: ResearchInsight[] = [];
 
     // 1. Skewness / Mean vs Median
-    const diff = summary.averageReactionTimeMs - summary.medianReactionTimeMs;
-    if (Math.abs(diff) >= 10) {
+    // Gated on both figures existing. Previously these were compared while
+    // defaulting to 0, so an empty cohort reported "Median (0 ms) is 400 ms
+    // faster than mean" as a finding.
+    const mean = summary.averageReactionTimeMs;
+    const median = summary.medianReactionTimeMs;
+    const diff = mean !== null && median !== null ? mean - median : null;
+    if (diff !== null && Math.abs(diff) >= 10) {
       insights.push({
         id: "insight-skew",
         category: "latency",
         title: "Latency Distribution Asymmetry",
-        message: `Median reaction time (${summary.medianReactionTimeMs} ms) is ${Math.abs(diff)} ms ${
+        message: `Median reaction time (${median} ms) is ${Math.abs(diff)} ms ${
           diff > 0 ? "faster than" : "slower than"
-        } mean (${summary.averageReactionTimeMs} ms), indicating ${diff > 0 ? "positive right-tail skew from cognitive conflict" : "left-tail skew"}.`,
+        } mean (${mean} ms), indicating ${diff > 0 ? "positive right-tail skew from cognitive conflict" : "left-tail skew"}.`,
         type: "neutral",
         metricImpact: `${diff > 0 ? "-" : "+"}${Math.abs(diff)} ms delta`,
       });
@@ -347,9 +405,8 @@ class MockStorageStore {
     // 2. Stimulus Type Variability
     const textStim = summary.stimulusBreakdown.find((s) => s.type === "text");
     const colorStim = summary.stimulusBreakdown.find((s) => s.type === "color");
-    const imageStim = summary.stimulusBreakdown.find((s) => s.type === "image");
 
-    if (textStim && colorStim && textStim.avgRt > 0 && colorStim.avgRt > 0) {
+    if (textStim?.avgRt != null && colorStim?.avgRt != null) {
       const gap = colorStim.avgRt - textStim.avgRt;
       insights.push({
         id: "insight-stimulus-cost",
@@ -361,25 +418,30 @@ class MockStorageStore {
       });
     }
 
-    // 3. Learning & Practice Effects (Trial 1-3 vs Trial 8-10)
-    if (summary.trialProgression.length >= 10) {
-      const earlyRt = (summary.trialProgression[0].avgRt + summary.trialProgression[1].avgRt) / 2;
-      const lateRt = (summary.trialProgression[8].avgRt + summary.trialProgression[9].avgRt) / 2;
-      const speedup = Math.round(earlyRt - lateRt);
-      if (speedup > 15) {
-        insights.push({
-          id: "insight-learning",
-          category: "learning",
-          title: "Intra-Session Practice Acceleration",
-          message: `Participants exhibited a ${speedup} ms latency acceleration across trials 8–10 compared to baseline trials 1–2 while maintaining >90% accuracy.`,
-          type: "positive",
-          metricImpact: `-${speedup} ms speedup`,
-        });
+    // 3. Learning & Practice Effects, comparing the first and last trial
+    //    numbers actually observed. Previously this required exactly ten
+    //    progression rows and read fixed indices 0, 1, 8 and 9.
+    const progression = summary.trialProgression;
+    if (progression.length >= 2) {
+      const first = progression[0];
+      const last = progression[progression.length - 1];
+      if (first.avgRt !== null && last.avgRt !== null) {
+        const speedup = Math.round(first.avgRt - last.avgRt);
+        if (speedup > 15) {
+          insights.push({
+            id: "insight-learning",
+            category: "learning",
+            title: "Intra-Session Practice Acceleration",
+            message: `Participants exhibited a ${speedup} ms latency acceleration by trial ${last.trial} compared to baseline trial ${first.trial}.`,
+            type: "positive",
+            metricImpact: `-${speedup} ms speedup`,
+          });
+        }
       }
     }
 
     // 4. Accuracy stability
-    if (summary.accuracyPercent >= 90) {
+    if (summary.accuracyPercent !== null && summary.accuracyPercent >= 90) {
       insights.push({
         id: "insight-accuracy-ceiling",
         category: "accuracy",
@@ -397,14 +459,19 @@ class MockStorageStore {
   public getLeaderboard(metric: "reactionTime" | "accuracy" | "consistency" = "reactionTime"): LeaderboardEntry[] {
     this.init();
     const entries: LeaderboardEntry[] = this.participants.map((p) => {
-      const pTrials = this.getTrials({ participantId: p.id });
+      const pTrials = this.getAdmissibleTrials({ participantId: p.id });
       const textTrials = pTrials.filter((t) => t.stimulusType === "text");
       const colorTrials = pTrials.filter((t) => t.stimulusType === "color");
       const imageTrials = pTrials.filter((t) => t.stimulusType === "image");
 
-      const textRt = textTrials.length > 0 ? Math.round(textTrials.reduce((a, b) => a + b.reactionTimeMs, 0) / textTrials.length) : Math.round(p.avgReactionTimeMs * 0.92);
-      const colorRt = colorTrials.length > 0 ? Math.round(colorTrials.reduce((a, b) => a + b.reactionTimeMs, 0) / colorTrials.length) : Math.round(p.avgReactionTimeMs * 1.05);
-      const imageRt = imageTrials.length > 0 ? Math.round(imageTrials.reduce((a, b) => a + b.reactionTimeMs, 0) / imageTrials.length) : Math.round(p.avgReactionTimeMs * 1.15);
+      // Per-modality latency is reported only where that modality was actually
+      // presented. The previous `avgRt * 0.92 / 1.05 / 1.15` multipliers
+      // displayed an invented latency for every condition a participant never
+      // encountered.
+      const avgOf = (rows: TrialResult[]) =>
+        rows.length > 0
+          ? Math.round(rows.reduce((a, b) => a + b.reactionTimeMs, 0) / rows.length)
+          : null;
 
       return {
         rank: 0,
@@ -414,21 +481,23 @@ class MockStorageStore {
         accuracyPercent: p.accuracyPercent,
         completedTrials: p.totalTrials,
         consistencyScore: p.consistencyScore,
-        textRt,
-        colorRt,
-        imageRt,
+        textRt: avgOf(textTrials),
+        colorRt: avgOf(colorTrials),
+        imageRt: avgOf(imageTrials),
         trend: p.avgReactionTimeMs < 400 ? "up" : p.avgReactionTimeMs > 450 ? "down" : "neutral",
         lastActive: p.lastActiveAt,
       };
     });
 
-    // Sort according to metric
+    // Sort according to metric. The mock store's participant metrics are
+    // always populated (they are written at record time), so these comparators
+    // stay numeric; the database implementation ranks with a window function.
     if (metric === "reactionTime") {
-      entries.sort((a, b) => a.averageReactionTimeMs - b.averageReactionTimeMs);
+      entries.sort((a, b) => a.averageReactionTimeMs! - b.averageReactionTimeMs!);
     } else if (metric === "accuracy") {
-      entries.sort((a, b) => b.accuracyPercent - a.accuracyPercent);
+      entries.sort((a, b) => b.accuracyPercent! - a.accuracyPercent!);
     } else {
-      entries.sort((a, b) => b.consistencyScore - a.consistencyScore);
+      entries.sort((a, b) => b.consistencyScore! - a.consistencyScore!);
     }
 
     return entries.map((entry, index) => ({

@@ -177,35 +177,35 @@ export default function AnalyticsPage() {
 
         <MetricCard
           label="Mean RT"
-          value={formatMs(summary?.averageReactionTimeMs || 0)}
+          value={formatMs(summary?.averageReactionTimeMs)}
           icon={<Clock className="w-3.5 h-3.5" />}
           accentColor="cyan"
         />
 
         <MetricCard
           label="Median RT"
-          value={formatMs(summary?.medianReactionTimeMs || 0)}
+          value={formatMs(summary?.medianReactionTimeMs)}
           icon={<Gauge className="w-3.5 h-3.5" />}
           accentColor="blue"
         />
 
         <MetricCard
           label="Accuracy"
-          value={formatPercent(summary?.accuracyPercent || 0)}
+          value={formatPercent(summary?.accuracyPercent)}
           icon={<Target className="w-3.5 h-3.5" />}
           accentColor="success"
         />
 
         <MetricCard
           label="Fastest RT"
-          value={formatMs(summary?.fastestReactionTimeMs || 0)}
+          value={formatMs(summary?.fastestReactionTimeMs)}
           icon={<Zap className="w-3.5 h-3.5" />}
           accentColor="warning"
         />
 
         <MetricCard
           label="Slowest RT"
-          value={formatMs(summary?.slowestReactionTimeMs || 0)}
+          value={formatMs(summary?.slowestReactionTimeMs)}
           icon={<TrendingDown className="w-3.5 h-3.5" />}
           accentColor="violet"
         />
@@ -222,7 +222,7 @@ export default function AnalyticsPage() {
         <ReactionTimeLineChart
           data={summary?.trialProgression || []}
           showStimulusToggles={true}
-          benchmarkLine={summary?.medianReactionTimeMs || 400}
+          benchmarkLine={summary?.medianReactionTimeMs ?? undefined}
         />
       </ChartCard>
 

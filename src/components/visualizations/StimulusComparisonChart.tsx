@@ -13,10 +13,11 @@ import {
 } from "recharts";
 import { StimulusType } from "@/types/participant";
 
+/** `avgRt`/`accuracy` are null when no trials of that modality were recorded. */
 interface StimulusItem {
   type: StimulusType;
-  avgRt: number;
-  accuracy: number;
+  avgRt: number | null;
+  accuracy: number | null;
   count: number;
 }
 
@@ -52,8 +53,12 @@ export function StimulusComparisonChart({ data }: { data: StimulusItem[] }) {
                 return (
                   <div className="glass-panel-elevated p-3 rounded-lg border border-white/15 text-xs space-y-1">
                     <p className="font-semibold text-white font-mono">{label} STIMULUS</p>
-                    <p className="text-[#4F8CFF]">Latency: {item.avgRt} ms</p>
-                    <p className="text-[#22C55E]">Accuracy: {item.accuracy}%</p>
+                    <p className="text-[#4F8CFF]">
+                      Latency: {item.avgRt === null ? "no data" : `${item.avgRt} ms`}
+                    </p>
+                    <p className="text-[#22C55E]">
+                      Accuracy: {item.accuracy === null ? "no data" : `${item.accuracy}%`}
+                    </p>
                     <p className="text-[#A5ADBD]">Trials recorded: {item.count}</p>
                   </div>
                 );
@@ -76,7 +81,8 @@ export function StimulusComparisonChart({ data }: { data: StimulusItem[] }) {
 export function AccuracyBarChart({
   data,
 }: {
-  data: { name: string; accuracy: number }[];
+  /** `accuracy` is null when no trials were recorded for that condition. */
+  data: { name: string; accuracy: number | null }[];
 }) {
   return (
     <div className="w-full h-[240px] lg:h-[280px]">

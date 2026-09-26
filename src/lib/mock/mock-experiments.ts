@@ -81,8 +81,13 @@ export const DEFAULT_COLOR_STUDY_NODES = [
     data: {
       label: "Measure Latency",
       category: "measurement" as const,
-      description: "performance.now() delta logging",
-      config: { precision: "sub-millisecond", filterOutliers: true, minValidMs: 100 },
+      description: "rAF-anchored onset delta logging",
+      // precision is a REPORTING grid, not a claim of accuracy. Stimulus onset
+      // carries +/-1 frame (6.9-16.7ms) of quantization that no browser API can
+      // remove. minValidMs is enforced at capture time: human simple reaction
+      // times bottom out near 150-200ms, so a faster sample is an anticipatory
+      // press rather than a fast response.
+      config: { precision: "0.1ms-grid", filterOutliers: true, minValidMs: 150 },
       iconName: "Timer",
     },
   },

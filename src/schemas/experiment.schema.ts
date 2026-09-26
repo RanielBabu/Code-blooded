@@ -72,6 +72,13 @@ export const TrialResultSchema = z.object({
   reactionTimeMs: z.number().nonnegative(),
   startedAt: z.string(),
   respondedAt: z.string(),
+  // Measurement provenance. Optional so historical records remain valid; the
+  // runtime populates these for every trial it captures.
+  valid: z.boolean().optional(),
+  rejection: z.enum(["premature", "timeout", "outlier"]).optional(),
+  rejectionDetail: z.string().optional(),
+  omission: z.boolean().optional(),
+  onsetSource: z.enum(["raf-timestamp", "performance-now", "date-now"]).optional(),
 });
 
 export type ValidatedExperiment = z.infer<typeof ExperimentSchema>;

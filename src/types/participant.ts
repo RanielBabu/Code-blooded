@@ -1,5 +1,18 @@
 export type StimulusType = "text" | "color" | "image" | "mixed";
 
+/**
+ * How the stimulus-onset timestamp was obtained. Recorded per trial so the
+ * provenance of a reaction time travels with the number, and so a dataset
+ * containing degraded samples can be identified after the fact.
+ *
+ * `raf-timestamp` is the only source considered instrumental. `date-now` is the
+ * server-rendering fallback and indicates the sample is not usable.
+ */
+export type OnsetSource = "raf-timestamp" | "performance-now" | "date-now";
+
+/** Reason a completed trial was excluded from aggregates. */
+export type TrialRejection = "premature" | "timeout" | "outlier";
+
 export interface Participant {
   id: string;
   displayName: string;
@@ -38,31 +51,79 @@ export interface TrialResult {
   reactionTimeMs: number;
   startedAt: string;
   respondedAt: string;
+
+  // --- Measurement provenance ---
+  /**
+   * Whether this trial passed the capture-time validity rules.
+   *
+   * This is a genuine three-state field and must not be collapsed:
+   * - `true`  — assessed at capture time and passed.
+   * - `false` — assessed and rejected (premature / timeout / outlier).
+   * - `null`  — not assessed, which is the state of every historical record
+   *   captured before validity tracking existed.
+   *
+   * Aggregate statistics exclude only `false`. Treating `null` as invalid
+   * would silently empty previously collected datasets, so the SQL filter is
+   * `valid IS DISTINCT FROM false` and never `WHERE valid`.
+   *
+   * Undefined is accepted on input for backwards compatibility with clients
+   * that predate the field, and is normalised to `null` on write.
+   */
+  valid?: boolean | null;
+  /** Populated when `valid` is false. */
+  rejection?: TrialRejection;
+  /** Human-readable justification, retained so exclusions are auditable. */
+  rejectionDetail?: string;
+  /** True when no response arrived inside the response window. */
+  omission?: boolean;
+  /** How the stimulus-onset timestamp was derived. */
+  onsetSource?: OnsetSource;
 }
 
+/**
+ * Aggregate statistics over a set of admissible trials.
+ *
+ * Every derived measurement is `number | null`. `null` means "no data supports
+ * this figure" and is deliberately distinct from `0`:
+ *
+ * - `0 ms` is a claim that a response took no time, which is not a thing that
+ *   can be measured. `null` is the absence of a claim.
+ * - `0%` accuracy is a claim that every response was wrong.
+ *
+ * Consumers must render `null` as a gap rather than coercing it to zero. The
+ * earlier mock layer substituted invented values for missing data (a synthetic
+ * `400 - trial * 6` ms curve, a `0.92`/`1.05`/`1.15` per-modality multiplier),
+ * which produced charts that looked complete while describing no measurement.
+ */
 export interface AnalyticsSummary {
+  /** Counts are always known, even when zero. */
   participantCount: number;
   trialCount: number;
-  averageReactionTimeMs: number;
-  medianReactionTimeMs: number;
-  accuracyPercent: number;
-  fastestReactionTimeMs: number;
-  slowestReactionTimeMs: number;
-  stdDeviationMs: number;
+  averageReactionTimeMs: number | null;
+  medianReactionTimeMs: number | null;
+  accuracyPercent: number | null;
+  fastestReactionTimeMs: number | null;
+  slowestReactionTimeMs: number | null;
+  stdDeviationMs: number | null;
   stimulusBreakdown: {
     type: StimulusType;
-    avgRt: number;
-    accuracy: number;
+    avgRt: number | null;
+    accuracy: number | null;
     count: number;
   }[];
+  /** One entry per trial number actually observed, in ascending order. */
   trialProgression: {
     trial: number;
-    avgRt: number;
-    accuracy: number;
-    textRt?: number;
-    colorRt?: number;
-    imageRt?: number;
+    avgRt: number | null;
+    accuracy: number | null;
+    textRt?: number | null;
+    colorRt?: number | null;
+    imageRt?: number | null;
   }[];
+  /**
+   * Fixed histogram bins. `count` is a real integer and may legitimately be
+   * zero for an empty bin, so this series stays fully numeric.
+   */
   rtDistribution: {
     binRange: string;
     minMs: number;
@@ -72,17 +133,22 @@ export interface AnalyticsSummary {
   }[];
 }
 
+/**
+ * A ranked cohort entry. Metrics are null when the participant has no
+ * admissible trials in the requested scope, rather than being back-filled with
+ * a guess.
+ */
 export interface LeaderboardEntry {
   rank: number;
   participantId: string;
   displayName: string;
-  averageReactionTimeMs: number;
-  accuracyPercent: number;
+  averageReactionTimeMs: number | null;
+  accuracyPercent: number | null;
   completedTrials: number;
-  consistencyScore: number;
-  textRt: number;
-  colorRt: number;
-  imageRt: number;
+  consistencyScore: number | null;
+  textRt: number | null;
+  colorRt: number | null;
+  imageRt: number | null;
   trend: "up" | "down" | "neutral";
   lastActive: string;
 }

@@ -5,18 +5,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatMs(ms: number): string {
-  if (isNaN(ms) || ms === null || ms === undefined) return "—";
+/**
+ * Formatters accept null and render it as an em dash. A missing measurement is
+ * displayed as absent, never as a zero.
+ */
+export function formatMs(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || Number.isNaN(ms)) return "—";
   return `${Math.round(ms)} ms`;
 }
 
-export function formatPercent(val: number): string {
-  if (isNaN(val) || val === null || val === undefined) return "—";
+export function formatPercent(val: number | null | undefined): string {
+  if (val === null || val === undefined || Number.isNaN(val)) return "—";
   return `${val.toFixed(1)}%`;
 }
 
-export function formatNumber(val: number): string {
-  if (isNaN(val) || val === null || val === undefined) return "—";
+export function formatNumber(val: number | null | undefined): string {
+  if (val === null || val === undefined || Number.isNaN(val)) return "—";
   return new Intl.NumberFormat("en-US").format(val);
 }
 

@@ -12,25 +12,34 @@ import {
   ReferenceLine,
 } from "recharts";
 
+/**
+ * A null measurement renders as a break in the line rather than a zero, so a
+ * gap in the data is visible as a gap instead of being read as a 0 ms response.
+ */
 interface LineChartDataPoint {
   trial: number;
-  avgRt: number;
-  textRt?: number;
-  colorRt?: number;
-  imageRt?: number;
-  accuracy?: number;
+  avgRt: number | null;
+  textRt?: number | null;
+  colorRt?: number | null;
+  imageRt?: number | null;
+  accuracy?: number | null;
 }
 
 interface ReactionTimeLineChartProps {
   data: LineChartDataPoint[];
   showStimulusToggles?: boolean;
+  /**
+   * Optional reference line. Intentionally has no default: a benchmark that
+   * was not measured should be absent from the chart rather than drawn at an
+   * invented value.
+   */
   benchmarkLine?: number;
 }
 
 export function ReactionTimeLineChart({
   data,
   showStimulusToggles = true,
-  benchmarkLine = 412,
+  benchmarkLine,
 }: ReactionTimeLineChartProps) {
   const [activeSeries, setActiveSeries] = useState({
     avg: true,
@@ -103,10 +112,12 @@ export function ReactionTimeLineChart({
             </button>
           </div>
 
-          <div className="text-[11px] text-[#A5ADBD] flex items-center gap-1.5">
-            <span className="w-3 border-t border-dashed border-[#F59E0B]" />
-            <span>Benchmark: {benchmarkLine} ms</span>
-          </div>
+          {benchmarkLine !== undefined && (
+            <div className="text-[11px] text-[#A5ADBD] flex items-center gap-1.5">
+              <span className="w-3 border-t border-dashed border-[#F59E0B]" />
+              <span>Cohort median: {Math.round(benchmarkLine)} ms</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -148,7 +159,9 @@ export function ReactionTimeLineChart({
                             {entry.name}:
                           </span>
                           <span className="font-mono font-medium text-white">
-                            {Math.round(entry.value)} ms
+                            {entry.value === null || entry.value === undefined
+                              ? "no data"
+                              : `${Math.round(entry.value)} ms`}
                           </span>
                         </div>
                       ))}
@@ -158,7 +171,7 @@ export function ReactionTimeLineChart({
                 return null;
               }}
             />
-            {benchmarkLine && (
+            {benchmarkLine !== undefined && (
               <ReferenceLine
                 y={benchmarkLine}
                 stroke="#F59E0B"

@@ -13,6 +13,11 @@ export interface MetricCardProps {
   icon?: React.ReactNode;
   accentColor?: "blue" | "violet" | "cyan" | "success" | "warning";
   className?: string;
+  /**
+   * Real measurements to plot. There is deliberately no default: a sparkline
+   * drawn from placeholder numbers is indistinguishable from one drawn from
+   * data, so the chart is omitted unless a caller supplies actual values.
+   */
   sparklineData?: number[];
 }
 
@@ -22,11 +27,11 @@ export function MetricCard({
   unit,
   change,
   trend = "neutral",
-  trendLabel = "vs prior benchmark",
+  trendLabel,
   icon,
   accentColor = "blue",
   className,
-  sparklineData = [40, 48, 45, 52, 58, 54, 62],
+  sparklineData,
 }: MetricCardProps) {
   const accentBorders = {
     blue: "hover:border-[#4F8CFF]/40",
@@ -44,19 +49,22 @@ export function MetricCard({
     warning: "text-[#F59E0B] bg-[#F59E0B]/10 border-[#F59E0B]/25",
   };
 
-  // Generate SVG path for sparkline
-  const minVal = Math.min(...sparklineData);
-  const maxVal = Math.max(...sparklineData);
+  // Generate SVG path for sparkline, only when real data was supplied.
+  const hasSparkline = Array.isArray(sparklineData) && sparklineData.length > 1;
+  const minVal = hasSparkline ? Math.min(...sparklineData!) : 0;
+  const maxVal = hasSparkline ? Math.max(...sparklineData!) : 0;
   const range = maxVal - minVal || 1;
   const height = 28;
   const width = 72;
-  const points = sparklineData
-    .map((v, i) => {
-      const x = (i / (sparklineData.length - 1)) * width;
-      const y = height - ((v - minVal) / range) * (height - 4) - 2;
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const points = hasSparkline
+    ? sparklineData!
+        .map((v, i) => {
+          const x = (i / (sparklineData!.length - 1)) * width;
+          const y = height - ((v - minVal) / range) * (height - 4) - 2;
+          return `${x},${y}`;
+        })
+        .join(" ")
+    : "";
 
   return (
     <GlassPanel
@@ -93,27 +101,29 @@ export function MetricCard({
           {unit && <span className="text-xs text-[#A5ADBD] font-medium">{unit}</span>}
         </div>
 
-        {/* Mini sparkline */}
-        <div className="opacity-70 group-hover:opacity-100 transition-opacity">
-          <svg width={width} height={height} className="overflow-visible">
-            <polyline
-              fill="none"
-              stroke={
-                accentColor === "cyan"
-                  ? "#22D3EE"
-                  : accentColor === "violet"
-                  ? "#8B5CF6"
-                  : accentColor === "success"
-                  ? "#22C55E"
-                  : "#4F8CFF"
-              }
-              strokeWidth="1.75"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              points={points}
-            />
-          </svg>
-        </div>
+        {/* Mini sparkline — rendered only for real measurements */}
+        {hasSparkline && (
+          <div className="opacity-70 group-hover:opacity-100 transition-opacity">
+            <svg width={width} height={height} className="overflow-visible">
+              <polyline
+                fill="none"
+                stroke={
+                  accentColor === "cyan"
+                    ? "#22D3EE"
+                    : accentColor === "violet"
+                    ? "#8B5CF6"
+                    : accentColor === "success"
+                    ? "#22C55E"
+                    : "#4F8CFF"
+                }
+                strokeWidth="1.75"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={points}
+              />
+            </svg>
+          </div>
+        )}
       </div>
 
       {(change || trendLabel) && (

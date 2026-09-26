@@ -3,7 +3,14 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Experiment } from "@/types/experiment";
 import { TrialResult, StimulusType } from "@/types/participant";
-import { createTrialTimer } from "@/lib/timing";
+import {
+  createTrialTimer,
+  evaluateTrial,
+  measureClockResolution,
+  DEFAULT_TIMING_RULES,
+  type TimingRules,
+  type ClockDiagnostics,
+} from "@/lib/timing";
 import { trialService } from "@/lib/api/services/trial-service";
 import { formatMs, formatPercent } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -426,12 +433,61 @@ function resolveExperimentFlow(experiment: Experiment) {
   return { mode, headline, description, tip, trials, activeNode, config };
 }
 
+/**
+ * Derive capture-time timing rules from the experiment graph.
+ *
+ * Previously `minValidMs`, `timeoutMs` and `filterOutliers` were authored in the
+ * builder, persisted, displayed in the inspector, and then never read by the
+ * runtime. They were decorative. Reading them here is what makes the graph
+ * authoritative over measurement policy.
+ *
+ * A configured minimum of 0 (or a missing key) is treated as "no floor
+ * configured" and falls back to the default, because a 0ms floor would admit
+ * every anticipatory press and silently destroy the dataset.
+ */
+function resolveTimingRules(experiment: Experiment): TimingRules {
+  const nodes = experiment.nodes || [];
+  const measurement = nodes.find((n) => n.data?.category === "measurement");
+  const response = nodes.find((n) => n.data?.category === "response");
+  // `config` is already `Record<string, any>` on NodeData, so no cast is needed
+  // and none is added here.
+  const m = measurement?.data?.config ?? {};
+  const r = response?.data?.config ?? {};
+
+  const configuredMin = Number(m.minValidMs);
+  const configuredTimeout = Number(r.timeoutMs);
+
+  return {
+    minValidMs:
+      Number.isFinite(configuredMin) && configuredMin > 0
+        ? configuredMin
+        : DEFAULT_TIMING_RULES.minValidMs,
+    timeoutMs:
+      Number.isFinite(configuredTimeout) && configuredTimeout > 0
+        ? configuredTimeout
+        : DEFAULT_TIMING_RULES.timeoutMs,
+    filterOutliers: m.filterOutliers !== false,
+    outlierMinSamples: DEFAULT_TIMING_RULES.outlierMinSamples,
+    outlierSigma: DEFAULT_TIMING_RULES.outlierSigma,
+  };
+}
+
 const COLOR_BUTTONS = [
   { label: "RED", key: "1", colorHex: "#EF4444", bgClass: "hover:bg-[#EF4444]/20 border-[#EF4444]/40" },
   { label: "BLUE", key: "2", colorHex: "#3B82F6", bgClass: "hover:bg-[#3B82F6]/20 border-[#3B82F6]/40" },
   { label: "GREEN", key: "3", colorHex: "#22C55E", bgClass: "hover:bg-[#22C55E]/20 border-[#22C55E]/40" },
   { label: "YELLOW", key: "4", colorHex: "#F59E0B", bgClass: "hover:bg-[#F59E0B]/20 border-[#F59E0B]/40" },
 ];
+
+/**
+ * Fixation cross duration before the stimulus frame is scheduled.
+ * Long enough to recentre gaze, short enough that the participant does not
+ * begin anticipating the stimulus onset.
+ */
+const FIXATION_MS = 380;
+
+/** Inter-trial feedback display. Never overlaps an active measurement window. */
+const FEEDBACK_MS = 320;
 
 export function ParticipantRuntime({
   experiment,
@@ -442,8 +498,36 @@ export function ParticipantRuntime({
   const [participantName, setParticipantName] = useState("Researcher Demo Subject");
   const [results, setResults] = useState<TrialResult[]>([]);
   const [lastFeedback, setLastFeedback] = useState<{ correct: boolean; rt: number } | null>(null);
+  const [clock, setClock] = useState<ClockDiagnostics | null>(null);
 
-  const timerRef = useRef(createTrialTimer());
+  const rules = React.useMemo(() => resolveTimingRules(experiment), [experiment]);
+
+  // Lazy ref init. `useRef(createTrialTimer())` would re-run the factory on
+  // every render and discard the result, and the timer must be constructed with
+  // the response window from the current rules.
+  const timerRef = useRef<ReturnType<typeof createTrialTimer> | null>(null);
+  if (timerRef.current === null) {
+    timerRef.current = createTrialTimer(rules.timeoutMs);
+  }
+
+  // Pending work that must be cancelled on restart and on unmount. Previously
+  // these timeouts were fire-and-forget, so restarting inside the fixation
+  // window would still fire the stale callback and start a trial the
+  // participant never saw.
+  const fixationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const feedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onsetFrameRef = useRef<number | null>(null);
+  const onsetFrame2Ref = useRef<number | null>(null);
+  const pendingOnsetRef = useRef<number | null>(null);
+  /** Bounds the response window. Set on trial start, cleared on every transition. */
+  const omissionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * Indirection so the omission timer can reach `handleOmission` without making
+   * `launchTrial` depend on a callback that is itself declared later and closes
+   * over `launchTrial`. A direct dependency here would be a circular reference.
+   */
+  const handleOmissionRef = useRef<(() => void) | null>(null);
+
   const trialActiveRef = useRef(false);
 
   const flow = React.useMemo(() => resolveExperimentFlow(experiment), [experiment]);
@@ -451,28 +535,207 @@ export function ParticipantRuntime({
   const totalTrials = Math.min(experiment.trialCount || 10, activeTrials.length);
   const currentStimulus = activeTrials[currentTrialIdx] || activeTrials[0];
 
-  // Start trial with fixation cross
-  const launchTrial = useCallback((trialIdx: number) => {
-    setStage("fixation");
-    trialActiveRef.current = false;
-
-    // Brief fixation cross (350ms) to center gaze
-    setTimeout(() => {
-      setStage("trial");
-      timerRef.current.start();
-      trialActiveRef.current = true;
-    }, 380);
+  // Probe the live clock once, so the footer reports measured configuration
+  // rather than an assumed one.
+  useEffect(() => {
+    let cancelled = false;
+    measureClockResolution().then((d) => {
+      if (!cancelled) setClock(d);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Record response via performance.now()
+  const cancelPending = useCallback(() => {
+    if (fixationTimerRef.current) {
+      clearTimeout(fixationTimerRef.current);
+      fixationTimerRef.current = null;
+    }
+    if (feedbackTimerRef.current) {
+      clearTimeout(feedbackTimerRef.current);
+      feedbackTimerRef.current = null;
+    }
+    if (onsetFrameRef.current !== null) {
+      cancelAnimationFrame(onsetFrameRef.current);
+      onsetFrameRef.current = null;
+    }
+    if (onsetFrame2Ref.current !== null) {
+      cancelAnimationFrame(onsetFrame2Ref.current);
+      onsetFrame2Ref.current = null;
+    }
+    if (omissionTimerRef.current) {
+      clearTimeout(omissionTimerRef.current);
+      omissionTimerRef.current = null;
+    }
+    trialActiveRef.current = false;
+  }, []);
+
+  // Unmount safety: without this the rAF chain can resolve after teardown.
+  useEffect(() => cancelPending, [cancelPending]);
+
+  /**
+   * Start a trial: fixation cross, then a stimulus frame whose onset is
+   * timestamped by the browser rather than by this code.
+   *
+   * The previous implementation called `timer.start()` in the same synchronous
+   * task as `setStage("trial")`. React had not yet rendered, committed, or
+   * painted anything, so the recorded onset preceded the visible stimulus by a
+   * full render+paint cycle (roughly 5-20ms) and every trial was systematically
+   * under-reported. The variable component of that overhead also inflated the
+   * measured standard deviation.
+   *
+   * Now: the first rAF callback receives the timestamp of the frame that will
+   * paint the stimulus, and the second confirms that frame was committed before
+   * responses are accepted. Onset is anchored to the earlier frame-start time,
+   * so the participant has physically seen the stimulus before any reaction can
+   * be recorded.
+   *
+   * `trialIdx` is intentionally not a parameter. The active stimulus is derived
+   * from `currentTrialIdx` state, and threading an index through a `setTimeout`
+   * closure previously produced a stale-closure off-by-one waiting to happen.
+   */
+  const launchTrial = useCallback(() => {
+    cancelPending();
+    setStage("fixation");
+
+    fixationTimerRef.current = setTimeout(() => {
+      fixationTimerRef.current = null;
+      setStage("trial");
+
+      // Frame 1: timestamp the frame that will present the stimulus.
+      onsetFrameRef.current = requestAnimationFrame((frameStartMs) => {
+        onsetFrameRef.current = null;
+        pendingOnsetRef.current = frameStartMs;
+
+        // Frame 2: that frame is now committed. Open the response window.
+        onsetFrame2Ref.current = requestAnimationFrame(() => {
+          onsetFrame2Ref.current = null;
+          timerRef.current!.start(pendingOnsetRef.current ?? undefined);
+          pendingOnsetRef.current = null;
+          trialActiveRef.current = true;
+
+          // Arm the bounded response window from stimulus onset.
+          omissionTimerRef.current = setTimeout(() => {
+            omissionTimerRef.current = null;
+            handleOmissionRef.current?.();
+          }, rules.timeoutMs);
+        });
+      });
+    }, FIXATION_MS);
+  }, [cancelPending, rules.timeoutMs]);
+
+  /**
+   * Complete the session: persist every trial (including rejected ones, so the
+   * exclusion is auditable) and show the debrief.
+   */
+  const finishRun = useCallback(
+    (finalResults: TrialResult[]) => {
+      setStage("completed");
+      // Submit the full run. Rejected trials are transmitted with `valid: false`
+      // and are excluded downstream by the storage layer, not hidden here.
+      trialService.submitTrialRun(participantName, finalResults).catch(console.error);
+
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ["#4F8CFF", "#8B5CF6", "#22D3EE", "#22C55E"],
+        });
+      } catch {}
+    },
+    [participantName]
+  );
+
+  /**
+   * Record a response window timeout as an explicit omission trial.
+   *
+   * The response window is bounded by the `responseNode` `timeoutMs` config.
+   * Previously the window was unbounded, so an inattentive participant could
+   * take arbitrarily long and the sample still entered the dataset, inflating
+   * the cohort mean. An omission is recorded rather than dropped so trial
+   * counts stay reconcilable against the protocol.
+   */
+  const handleOmission = useCallback(() => {
+    if (!trialActiveRef.current || stage !== "trial") return;
+    trialActiveRef.current = false;
+
+    const timing = timerRef.current!.stop();
+    const stim = activeTrials[currentTrialIdx] || activeTrials[0];
+
+    const omissionTrial: TrialResult = {
+      id: `trial-live-${currentTrialIdx + 1}`,
+      participantId: "pending",
+      experimentId: experiment.id,
+      trialNumber: currentTrialIdx + 1,
+      stimulusType: stim.type,
+      stimulus: {
+        prompt: stim.prompt,
+        text: stim.text,
+        color: stim.colorHex,
+        imageUrl: stim.imageUrl,
+        congruent: stim.congruent,
+      },
+      response: {
+        selectedAnswer: "",
+        inputMethod: "keyboard",
+      },
+      correct: false,
+      // The full elapsed time is retained for analysis even though the trial
+      // is scored as an omission; it is the best available evidence of the
+      // participant's disengagement.
+      reactionTimeMs: timing.reactionTimeMs,
+      startedAt: timing.startedAtIso,
+      respondedAt: timing.stoppedAtIso,
+      valid: false,
+      rejection: "timeout",
+      rejectionDetail: `No response within ${rules.timeoutMs}ms window (elapsed ${timing.reactionTimeMs}ms)`,
+      omission: true,
+      onsetSource: timing.onsetSource,
+    };
+
+    const nextResults = [...results, omissionTrial];
+    setResults(nextResults);
+    setLastFeedback({ correct: false, rt: timing.reactionTimeMs });
+
+    if (currentTrialIdx + 1 < totalTrials) {
+      setStage("feedback");
+      feedbackTimerRef.current = setTimeout(() => {
+        feedbackTimerRef.current = null;
+        setCurrentTrialIdx((prev) => prev + 1);
+        launchTrial();
+      }, FEEDBACK_MS);
+    } else {
+      finishRun(nextResults);
+    }
+  }, [
+    activeTrials,
+    currentTrialIdx,
+    experiment.id,
+    finishRun,
+    launchTrial,
+    results,
+    rules.timeoutMs,
+    stage,
+    totalTrials,
+  ]);
+
+  // Record response
   const handleResponse = useCallback(
     (selectedAnswer: string, inputMethod: "keyboard" | "button" = "button") => {
       if (!trialActiveRef.current || stage !== "trial") return;
       trialActiveRef.current = false;
 
-      const timing = timerRef.current.stop();
+      const timing = timerRef.current!.stop();
       const stim = activeTrials[currentTrialIdx] || activeTrials[0];
       const correct = selectedAnswer === stim.correctAnswer;
+
+      // Capture-time validity. Evaluated here, not at aggregation time, and
+      // recorded on the trial so exclusions remain auditable rather than
+      // silently filtered out of a mean.
+      const priorRts = results.filter((r) => r.valid !== false).map((r) => r.reactionTimeMs);
+      const verdict = evaluateTrial(timing.reactionTimeMs, rules, priorRts);
 
       const recordedTrial: TrialResult = {
         id: `trial-live-${currentTrialIdx + 1}`,
@@ -495,6 +758,11 @@ export function ParticipantRuntime({
         reactionTimeMs: timing.reactionTimeMs,
         startedAt: timing.startedAtIso,
         respondedAt: timing.stoppedAtIso,
+        valid: verdict.valid,
+        rejection: verdict.rejection,
+        rejectionDetail: verdict.detail,
+        omission: false,
+        onsetSource: timing.onsetSource,
       };
 
       const nextResults = [...results, recordedTrial];
@@ -503,31 +771,37 @@ export function ParticipantRuntime({
 
       // Move to next trial or finish
       if (currentTrialIdx + 1 < totalTrials) {
-        // Very brief feedback display (250ms) without contaminating RT
+        // Very brief feedback display, entirely between measurement windows so
+        // it cannot contaminate a reaction time.
         setStage("feedback");
-        setTimeout(() => {
+        feedbackTimerRef.current = setTimeout(() => {
+          feedbackTimerRef.current = null;
           setCurrentTrialIdx((prev) => prev + 1);
-          launchTrial(currentTrialIdx + 1);
-        }, 320);
+          launchTrial();
+        }, FEEDBACK_MS);
       } else {
-        // Complete study
-        setStage("completed");
-        // Submit trial run to mock storage / API
-        trialService.submitTrialRun(participantName, nextResults).catch(console.error);
-
-        // Confetti celebration
-        try {
-          confetti({
-            particleCount: 80,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ["#4F8CFF", "#8B5CF6", "#22D3EE", "#22C55E"],
-          });
-        } catch {}
+        finishRun(nextResults);
       }
     },
-    [activeTrials, currentTrialIdx, experiment.id, launchTrial, participantName, results, stage, totalTrials]
+    [
+      activeTrials,
+      currentTrialIdx,
+      experiment.id,
+      finishRun,
+      launchTrial,
+      results,
+      rules,
+      stage,
+      totalTrials,
+    ]
   );
+
+  // Keep the omission indirection current. Must be an effect, not a render-time
+  // assignment: the omission timer only fires well after mount, so the ref is
+  // always populated before it is read.
+  useEffect(() => {
+    handleOmissionRef.current = handleOmission;
+  }, [handleOmission]);
 
   // Keyboard navigation for keys 1, 2, 3, 4 or R, G, B, Y
   useEffect(() => {
@@ -558,15 +832,23 @@ export function ParticipantRuntime({
 
   // Restart demo run
   const handleRestart = () => {
+    // Must cancel first: without this a restart during the fixation window
+    // leaves the stale callback live, which would start a trial the
+    // participant never saw and record a reaction to it.
+    cancelPending();
     setResults([]);
     setCurrentTrialIdx(0);
     setLastFeedback(null);
     setStage("instructions");
   };
 
-  // Completed metrics
-  const accuracy = results.length > 0 ? (results.filter((r) => r.correct).length / results.length) * 100 : 0;
-  const rts = results.map((r) => r.reactionTimeMs);
+  // Completed metrics. Derived from admissible trials only, matching the
+  // aggregation the storage layer performs, so the debrief the participant sees
+  // and the statistics the researcher reads are computed the same way.
+  const scored = results.filter((r) => r.valid !== false);
+  const excluded = results.length - scored.length;
+  const accuracy = scored.length > 0 ? (scored.filter((r) => r.correct).length / scored.length) * 100 : 0;
+  const rts = scored.map((r) => r.reactionTimeMs);
   const avgRt = rts.length > 0 ? Math.round(rts.reduce((a, b) => a + b, 0) / rts.length) : 0;
   const fastestRt = rts.length > 0 ? Math.min(...rts) : 0;
   const slowestRt = rts.length > 0 ? Math.max(...rts) : 0;
@@ -702,7 +984,7 @@ export function ParticipantRuntime({
               </div>
 
               <Button
-                onClick={() => launchTrial(0)}
+                onClick={() => launchTrial()}
                 variant="glow"
                 size="lg"
                 leftIcon={<Play className="w-4 h-4 fill-current" />}
@@ -756,7 +1038,16 @@ export function ParticipantRuntime({
                   return (
                     <button
                       key={btnLabel}
-                      onClick={() => handleResponse(btnLabel, "button")}
+                      // pointerdown, not click. A click event is only dispatched
+                      // after the full pointerdown -> pointerup sequence, adding a
+                      // systematic offset relative to the keyboard path and biasing
+                      // button responses slower. preventDefault suppresses the
+                      // synthetic mouse/click sequence and the 75ms active-state
+                      // transition, which would otherwise be in flight here.
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        handleResponse(btnLabel, "button");
+                      }}
                       className={`py-3.5 px-4 rounded-xl border bg-[#10141D] text-white font-bold text-sm tracking-wide transition-all duration-75 active:scale-95 flex flex-col items-center justify-center gap-1 shadow-lg hover:border-[#4F8CFF]/60 hover:bg-[#4F8CFF]/15 ${
                         colorBtn ? colorBtn.bgClass : "border-white/10"
                       }`}
@@ -801,6 +1092,22 @@ export function ParticipantRuntime({
                   All {totalTrials} trials successfully serialized to telemetry stream.
                 </p>
               </div>
+
+              {/* Exclusion notice: a dataset that has been cleaned is only
+                  interpretable if the reader knows what was removed. */}
+              {excluded > 0 && (
+                <div className="p-3 rounded-xl bg-[#F59E0B]/[0.06] border border-[#F59E0B]/25 text-left">
+                  <p className="text-[10px] text-[#F59E0B] uppercase font-mono">
+                    {excluded} of {results.length} trials excluded
+                  </p>
+                  <p className="text-[11px] text-[#A5ADBD] mt-1 leading-relaxed">
+                    Removed by capture-time validity rules: responses faster than{" "}
+                    {rules.minValidMs}ms (anticipatory), no response within {rules.timeoutMs}ms
+                    (omission), or robust outliers. Figures below reflect the{" "}
+                    {scored.length} admissible trials.
+                  </p>
+                </div>
+              )}
 
               {/* Performance Metrics Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -867,8 +1174,20 @@ export function ParticipantRuntime({
 
       {/* Minimal Footer */}
       <footer className="h-10 border-t border-white/[0.06] px-6 flex items-center justify-between text-[11px] text-[#697386] font-mono">
-        <span>COGNITIVELAB RUNTIME ENGINE • v2.4</span>
-        <span>LATENCY PRECISION: HIGH RES SUB-MS</span>
+        <span>COGNITIVELAB RUNTIME ENGINE • v2.5</span>
+        {/* Measured configuration, not an assumed one. The previous
+            "HIGH RES SUB-MS" claim was unsupportable: stimulus onset carries
+            +/-1 frame of quantization (6.9-16.7ms) that no browser API can
+            remove, which is two orders of magnitude larger than the clock
+            resolution this line was implicitly citing. */}
+        <span
+          title={clock?.note}
+          className={clock?.crossOriginIsolated ? "text-[#4F8CFF]" : "text-[#F59E0B]"}
+        >
+          {clock
+            ? `ONSET rAF • CLOCK ${clock.resolutionMs.toFixed(3)}ms • ${clock.crossOriginIsolated ? "ISOLATED 5us" : "CLAMPED 100us"} • ±1 FRAME`
+            : "ONSET rAF • PROBING CLOCK…"}
+        </span>
       </footer>
     </div>
   );

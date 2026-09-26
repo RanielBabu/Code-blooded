@@ -1,0 +1,25 @@
+# Local PostgreSQL for CognitiveLab.
+#
+# Port 5433 is deliberate: 5432 is commonly claimed by another Postgres on the
+# host, and CognitiveLab must not share a server with an unrelated project.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cognitivelab-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cognitivelab
+      POSTGRES_PASSWORD: cognitivelab
+      POSTGRES_DB: cognitivelab
+    ports:
+      - "5433:5432"
+    volumes:
+      - cognitivelab-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cognitivelab -d cognitivelab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  cognitivelab-pgdata:

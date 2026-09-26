@@ -1,39 +1,27 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useMemo } from "react";
 import { ParticipantPersonalSummary } from "@/types/participant";
 import { participantService } from "@/lib/api/services/participant-service";
+import { createAsyncStore, useAsyncStore } from "@/lib/store/async-store";
 
 export function useParticipantPersonal(participantId?: string) {
-  const [data, setData] = useState<ParticipantPersonalSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const store = useMemo(
+    () =>
+      createAsyncStore<ParticipantPersonalSummary | null>(
+        null,
+        // No participant selected is not an error and not a pending request.
+        // Resolving null leaves the store in `success` with no data, which the
+        // page renders as an empty state rather than a spinner that never ends.
+        () =>
+          participantId
+            ? participantService.getPersonalSummary(participantId)
+            : Promise.resolve(null)
+      ),
+    [participantId]
+  );
 
-  const fetchPersonalData = useCallback(async () => {
-    if (!participantId) {
-      setLoading(false);
-      return;
-    }
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await participantService.getPersonalSummary(participantId);
-      setData(res);
-    } catch (err: any) {
-      setError(err?.message || "Failed to load personal participant records");
-    } finally {
-      setLoading(false);
-    }
-  }, [participantId]);
+  const { data, loading, error, refresh: refetch } = useAsyncStore(store);
 
-  useEffect(() => {
-    fetchPersonalData();
-  }, [fetchPersonalData]);
-
-  return {
-    data,
-    loading,
-    error,
-    refetch: fetchPersonalData,
-  };
+  return { data, loading, error, refetch };
 }

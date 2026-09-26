@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { formatTimestamp } from "@/lib/utils";
 import { RouteGuard } from "@/components/auth/RouteGuard";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useParticipantPersonal } from "@/hooks/use-participant-personal";
@@ -174,7 +175,7 @@ export default function ParticipantExperimentResultPage() {
                       {trial.response?.selectedAnswer || "—"}
                     </td>
                     <td className="py-2.5 px-3 text-[#697386] font-mono text-[10px]">
-                      {new Date(trial.respondedAt || trial.startedAt || Date.now()).toLocaleString()}
+                      {formatTimestamp(trial.respondedAt ?? trial.startedAt)}
                     </td>
                   </tr>
                 ))}

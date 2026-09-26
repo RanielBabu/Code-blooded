@@ -1,39 +1,43 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useMemo } from "react";
 import { AnalyticsSummary, ResearchInsight, TrialResult } from "@/types/participant";
 import { analyticsService } from "@/lib/api/services/analytics-service";
 import { trialService } from "@/lib/api/services/trial-service";
+import { createAsyncStore, useAsyncStore } from "@/lib/store/async-store";
+
+interface AnalyticsPayload {
+  summary: AnalyticsSummary | null;
+  insights: ResearchInsight[];
+  trials: TrialResult[];
+}
 
 export function useAnalytics(experimentId?: string, participantId?: string) {
-  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-  const [insights, setInsights] = useState<ResearchInsight[]>([]);
-  const [trials, setTrials] = useState<TrialResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Summary, insights, and raw trials are fetched together and committed as one
+  // unit. Committing them separately would let a chart render a summary beside
+  // insights computed from a different set of trials.
+  const store = useMemo(
+    () =>
+      createAsyncStore<AnalyticsPayload>(
+        { summary: null, insights: [], trials: [] },
+        async () => {
+          const [summary, insights, trials] = await Promise.all([
+            analyticsService.getSummary(experimentId, participantId),
+            analyticsService.getInsights(experimentId),
+            trialService.getTrials({ experimentId, participantId }),
+          ]);
+          return { summary, insights, trials };
+        }
+      ),
+    [experimentId, participantId]
+  );
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [sum, ins, trs] = await Promise.all([
-        analyticsService.getSummary(experimentId, participantId),
-        analyticsService.getInsights(experimentId),
-        trialService.getTrials({ experimentId, participantId }),
-      ]);
-      setSummary(sum);
-      setInsights(ins);
-      setTrials(trs);
-    } catch (err: any) {
-      setError(err?.message || "Failed to load analytics");
-    } finally {
-      setLoading(false);
-    }
-  }, [experimentId, participantId]);
+  const {
+    data: { summary, insights, trials },
+    loading,
+    error,
+    refresh,
+  } = useAsyncStore(store);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  return { summary, insights, trials, loading, error, refresh: loadData };
+  return { summary, insights, trials, loading, error, refresh };
 }

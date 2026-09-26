@@ -107,8 +107,12 @@ export function serializeExperiment(
       ? {
           participants: stats.participants,
           completedTrials: stats.completedTrials,
-          avgReactionTimeMs: stats.avgReactionTimeMs ?? 0,
-          accuracyPercent: stats.accuracyPercent ?? 0,
+          // A cohort with no admissible trials yields null rather than 0. The
+          // counts above are genuinely known when zero; these two are not
+          // measurements at all until a trial exists, and 0 ms / 0% would be a
+          // false claim rather than a blank.
+          avgReactionTimeMs: stats.avgReactionTimeMs,
+          accuracyPercent: stats.accuracyPercent,
         }
       : undefined,
   };

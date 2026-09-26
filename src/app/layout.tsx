@@ -22,6 +22,7 @@ export const metadata: Metadata = {
 };
 
 import { AuthProvider } from "@/lib/auth/auth-context";
+import { DegradedDataBanner } from "@/components/DegradedDataBanner";
 
 export default function RootLayout({
   children,
@@ -34,7 +35,10 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-[#05060A] text-white">
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <DegradedDataBanner />
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

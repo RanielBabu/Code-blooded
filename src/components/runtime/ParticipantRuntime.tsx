@@ -16,6 +16,7 @@ import { formatMs, formatPercent } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import {
   Shield,
+  ShieldAlert,
   Play,
   ArrowRight,
   CheckCircle,
@@ -532,12 +533,53 @@ export function ParticipantRuntime({
    */
   const handleOmissionRef = useRef<(() => void) | null>(null);
 
-  // Sync participantName if user changes
-  useEffect(() => {
-    if (user?.displayName) {
-      setParticipantName(user.displayName);
-    }
-  }, [user?.displayName]);
+  // Re-seed the editable name when the signed-in user changes.
+  //
+  // This was an effect, which meant the field rendered once with the previous
+  // user's name and then committed a second render to correct it -- a visible
+  // flash of the wrong participant on the identity field of a study run.
+  // Adjusting during render is React's documented alternative for "state seeded
+  // from a prop that can change": React discards the in-progress render and
+  // re-runs it immediately, so the wrong name is never committed.
+  const signedInName = user?.displayName;
+  const [lastSyncedName, setLastSyncedName] = useState(signedInName);
+  if (signedInName !== lastSyncedName) {
+    setLastSyncedName(signedInName);
+    if (signedInName) setParticipantName(signedInName);
+  }
+
+  // =========================================================================
+  // CENTRALIZED PUBLISHING GATE CHECK:
+  // If experiment is NOT published, participant access MUST be blocked!
+  // =========================================================================
+  if (!experiment || experiment.status !== "published") {
+    return (
+      <div className="min-h-screen bg-[#05060A] text-white flex flex-col items-center justify-center p-6 text-center select-none">
+        <div className="max-w-md w-full p-8 rounded-3xl bg-[#0D111A] border border-amber-500/30 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center mx-auto shadow-lg">
+            <ShieldAlert className="w-7 h-7" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold tracking-tight text-white">This study is currently unavailable</h2>
+            <p className="text-xs text-[#A5ADBD] leading-relaxed">
+              The research investigator has removed, unpublished, or set this experiment to disabled status. Participant trial telemetry is temporarily blocked.
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5 font-mono text-[11px] text-[#697386]">
+            Study Name: <span className="text-white font-semibold">{experiment?.name || "Experiment"}</span> · Status:{" "}
+            <span className="uppercase text-amber-400 font-bold">{experiment?.status || "Disabled / Removed"}</span>
+          </div>
+          <div className="pt-2">
+            <Link href="/participant/dashboard">
+              <Button variant="glow" size="md" className="w-full justify-center">
+                Return to Available Studies
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const trialActiveRef = useRef(false);
 

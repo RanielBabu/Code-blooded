@@ -3,7 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../index";
 import { admissibleTrials, experimentVersions, experiments, trials } from "../schema";
 import { newExperimentId } from "../ids";
-import { serializeExperiment, type ExperimentStats } from "../serializers";
+import { serializeExperiment, toInt, toNumber, type ExperimentStats } from "../serializers";
 import type { Experiment, ExperimentEdge, ExperimentNode, ExperimentStatus } from "@/types/experiment";
 
 /**
@@ -30,10 +30,19 @@ async function loadStats(): Promise<Map<string, ExperimentStats>> {
   const rows = await db
     .select({
       experimentId: trials.experimentId,
-      participants: sql<number>`count(distinct ${trials.participantId})::int`,
-      completedTrials: sql<number>`count(*)::int`,
-      avgReactionTimeMs: sql<number | null>`round(avg(${trials.reactionTimeMs}))::int`,
-      accuracyPercent: sql<number | null>`round(
+      // Typed `unknown` on purpose. `sql<number>` only asserts a type to the
+      // compiler; it performs no runtime conversion. The aggregates below are
+      // coerced in JS by toInt/toNumber, which is the only place a conversion
+      // actually happens. `accuracyPercent` must not be given a `::int` cast
+      // either: it needs a decimal place, and `round(numeric, 1)` returns
+      // `numeric`, which the driver hands back as a *string* ("91.8"). Passing
+      // that string to a formatter expecting a number crashed the experiments
+      // page with `val.toFixed is not a function`. The neighbouring `::int`
+      // casts are safe precisely because they yield a real integer.
+      participants: sql<unknown>`count(distinct ${trials.participantId})::int`,
+      completedTrials: sql<unknown>`count(*)::int`,
+      avgReactionTimeMs: sql<unknown>`round(avg(${trials.reactionTimeMs}))::int`,
+      accuracyPercent: sql<unknown>`round(
         (count(*) filter (where ${trials.correct}))::numeric * 100 / nullif(count(*), 0), 1
       )`,
     })
@@ -45,10 +54,14 @@ async function loadStats(): Promise<Map<string, ExperimentStats>> {
     rows.map((r) => [
       r.experimentId,
       {
-        participants: r.participants,
-        completedTrials: r.completedTrials,
-        avgReactionTimeMs: r.avgReactionTimeMs,
-        accuracyPercent: r.accuracyPercent,
+        participants: toInt(r.participants) ?? 0,
+        completedTrials: toInt(r.completedTrials) ?? 0,
+        // Measurements, not counts. An experiment with no admissible trials has
+        // no mean RT and no accuracy; that is the absence of a measurement, and
+        // it stays null so the UI renders a gap. Zero would be a claim that
+        // every response was instant and every answer wrong.
+        avgReactionTimeMs: toInt(r.avgReactionTimeMs),
+        accuracyPercent: toNumber(r.accuracyPercent),
       },
     ])
   );

@@ -3,6 +3,7 @@
 import React, { use } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { formatClock, formatDate } from "@/lib/utils";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { GlassPanel } from "@/components/ui/GlassPanel";
@@ -72,7 +73,7 @@ export default function ParticipantProfilePage({ params }: { params: Promise<{ i
         <div className="flex items-center gap-4 text-xs font-mono text-[#A5ADBD]">
           <div className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-[#697386]" />
-            <span>Enrolled: {new Date(participant.createdAt).toLocaleDateString()}</span>
+            <span>Enrolled: {formatDate(participant.createdAt)}</span>
           </div>
         </div>
       </GlassPanel>
@@ -189,7 +190,7 @@ export default function ParticipantProfilePage({ params }: { params: Promise<{ i
                     {formatMs(t.reactionTimeMs)}
                   </td>
                   <td className="py-3 px-4 text-[#697386] text-[10px]">
-                    {new Date(t.respondedAt).toLocaleTimeString()}
+                    {formatClock(t.respondedAt)}
                   </td>
                 </tr>
               ))}

@@ -1,30 +1,21 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useMemo } from "react";
 import { Participant } from "@/types/participant";
 import { participantService } from "@/lib/api/services/participant-service";
+import { createAsyncStore, useAsyncStore } from "@/lib/store/async-store";
 
 export function useParticipants() {
-  const [participants, setParticipants] = useState<Participant[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // The store is the single source of truth for the cohort. It is created once
+  // per hook instance, so mounting the page fetches fresh -- and a slow response
+  // that arrives after a newer request began is discarded by the store's
+  // generation guard rather than overwriting the current cohort.
+  const store = useMemo(
+    () => createAsyncStore<Participant[]>([], () => participantService.getAll()),
+    []
+  );
 
-  const fetchParticipants = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await participantService.getAll();
-      setParticipants(data);
-    } catch (err: any) {
-      setError(err?.message || "Failed to load participants");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: participants, loading, error, refresh } = useAsyncStore(store);
 
-  useEffect(() => {
-    fetchParticipants();
-  }, [fetchParticipants]);
-
-  return { participants, loading, error, refresh: fetchParticipants };
+  return { participants, loading, error, refresh };
 }

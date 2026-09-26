@@ -1,8 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { User, ParticipantLoginCredentials, ResearcherLoginCredentials, Role } from "@/types/auth";
-import { MOCK_USERS, DEFAULT_USER } from "./mock-users";
+import React, { createContext, useContext } from "react";
+import { User, ParticipantLoginCredentials, ResearcherLoginCredentials } from "@/types/auth";
+import { MOCK_USERS } from "./mock-users";
+import { setAuthUser, useAuthHydrated, useAuthUser } from "./auth-store";
 import { calculateAge, validateRoleAge } from "@/lib/demographics";
 import { mockStore } from "@/lib/mock/mock-storage";
 
@@ -19,37 +20,17 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = "cognitivelab_auth_user_v2";
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Initialize auth state from local storage or default user
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (stored) {
-        setUser(JSON.parse(stored));
-      } else {
-        // Default to Researcher Alpha for immediate exploration
-        setUser(DEFAULT_USER);
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(DEFAULT_USER));
-      }
-    } catch {
-      setUser(DEFAULT_USER);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  // Read through the external store rather than copying localStorage into
+  // state from an effect. See auth-store.ts for why that is the honest model:
+  // it removes an extra render with `user === null`, and it picks up sign-in and
+  // sign-out performed in another tab.
+  const user = useAuthUser();
+  const hydrated = useAuthHydrated();
+  const isLoading = !hydrated;
 
   const saveUserSession = (newUser: User | null) => {
-    setUser(newUser);
-    if (newUser) {
-      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(newUser));
-    } else {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
+    setAuthUser(newUser);
   };
 
   const loginParticipant = (cred: ParticipantLoginCredentials): { success: boolean; error?: string } => {
@@ -72,6 +53,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: `part-${Date.now().toString().slice(-4)}`,
       role: "participant",
       displayName: cred.name.trim(),
+      email: cred.email?.trim() || `${cred.name.trim().toLowerCase().replace(/\s+/g, ".")}@cognitivelab.local`,
       dateOfBirth: cred.dateOfBirth,
       age: ageResult.age,
       sex: cred.sex,
@@ -103,10 +85,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginResearcher = (cred: ResearcherLoginCredentials): { success: boolean; error?: string } => {
-    if (!cred.institutionalId || cred.institutionalId.trim().length === 0) {
-      return { success: false, error: "Enter your researcher or institutional ID." };
-    }
-
     const ageResult = calculateAge(cred.dateOfBirth);
     if (!ageResult.valid) {
       return { success: false, error: ageResult.error };
@@ -117,15 +95,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: false, error: validation.message };
     }
 
+    const instId = cred.institutionalId?.trim() || `RES-${Date.now().toString().slice(-4)}`;
+
     const researcherUser: User = {
       id: `res-${Date.now().toString().slice(-4)}`,
       role: "researcher",
       displayName: cred.name.trim(),
+      email: cred.email?.trim() || `${cred.name.trim().toLowerCase().replace(/\s+/g, ".")}@lab.edu`,
       dateOfBirth: cred.dateOfBirth,
       age: ageResult.age,
       sex: cred.sex,
       ageGroup: ageResult.ageGroup,
-      institutionalId: cred.institutionalId.trim().toUpperCase(),
+      institutionalId: instId.toUpperCase(),
       createdAt: new Date().toISOString(),
       permissions: [
         "own_profile",

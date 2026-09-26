@@ -14,7 +14,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --import ./scripts/load-env.ts scripts/seed.ts",
     "db:verify": "npm run db:seed && tsx scripts/smoke.ts",
-    "db:reset": "drizzle-kit migrate && tsx scripts/seed.ts"
+    "db:reset": "drizzle-kit migrate && tsx scripts/seed.ts",
+    "check:api": "tsx scripts/check-api-provenance.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",

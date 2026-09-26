@@ -1,122 +1,232 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { NeuralCanvas } from "@/components/visualizations/NeuralCanvas";
-import { LiveSparkline } from "@/components/visualizations/LiveSparkline";
+import { RoleSelectModal } from "@/components/auth/RoleSelectModal";
 import { Button } from "@/components/ui/Button";
 import { GlassPanel } from "@/components/ui/GlassPanel";
 import {
   ArrowRight,
   Sparkles,
+  Zap,
+  Volume2,
+  Target,
+  Palette,
+  Diamond,
+  BookOpen,
+  Hourglass,
+  ShieldCheck,
+  ChevronRight,
   Layers,
   FlaskConical,
-  Activity,
   BarChart3,
-  Cpu,
-  ShieldCheck,
-  CheckCircle,
+  Lock,
   Play,
-  Share2,
+  Activity,
   Workflow,
-  Eye,
-  GitBranch,
   Timer,
-  ChevronRight,
   Database,
-  ExternalLink,
 } from "lucide-react";
-import { ReactionTimeLineChart } from "@/components/visualizations/ReactionTimeLineChart";
 
 export default function LandingPage() {
-  const sampleProgression = [
-    { trial: 1, avgRt: 448, textRt: 395, colorRt: 472, imageRt: 495 },
-    { trial: 2, avgRt: 432, textRt: 382, colorRt: 450, imageRt: 480 },
-    { trial: 3, avgRt: 420, textRt: 368, colorRt: 435, imageRt: 462 },
-    { trial: 4, avgRt: 415, textRt: 360, colorRt: 430, imageRt: 458 },
-    { trial: 5, avgRt: 410, textRt: 355, colorRt: 425, imageRt: 450 },
-    { trial: 6, avgRt: 398, textRt: 345, colorRt: 412, imageRt: 438 },
-    { trial: 7, avgRt: 392, textRt: 338, colorRt: 405, imageRt: 430 },
-    { trial: 8, avgRt: 385, textRt: 332, colorRt: 398, imageRt: 422 },
-    { trial: 9, avgRt: 380, textRt: 328, colorRt: 392, imageRt: 418 },
-    { trial: 10, avgRt: 374, textRt: 320, colorRt: 385, imageRt: 410 },
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<{ id: string; name: string } | null>(null);
+
+  const games = [
+    {
+      id: "exp-flash-count",
+      name: "Flash Count",
+      tagline: "Visual Flashes",
+      description: "Count rapid white pulses in a short visual sequence.",
+      icon: Zap,
+      gradient: "from-[#38BDF8] to-[#0284C7]",
+      border: "border-[#38BDF8]/40",
+      accent: "#38BDF8",
+    },
+    {
+      id: "exp-tone-detect",
+      name: "Tone Detect",
+      tagline: "Auditory Oddball",
+      description: "Detect the unexpected low tone within an auditory stream.",
+      icon: Volume2,
+      gradient: "from-[#8B5CF6] to-[#6D28D9]",
+      border: "border-[#8B5CF6]/40",
+      accent: "#8B5CF6",
+    },
+    {
+      id: "exp-visual-search",
+      name: "Visual Search",
+      tagline: "Feature Pop-Out",
+      description: "Find the colored target rapidly among similar distractors.",
+      icon: Target,
+      gradient: "from-[#10B981] to-[#059669]",
+      border: "border-[#10B981]/40",
+      accent: "#10B981",
+    },
+    {
+      id: "exp-color-response",
+      name: "Color Word",
+      tagline: "Stroop Latency",
+      description: "Identify font ink color under semantic text conflict.",
+      icon: Palette,
+      gradient: "from-[#F59E0B] to-[#D97706]",
+      border: "border-[#F59E0B]/40",
+      accent: "#F59E0B",
+    },
+    {
+      id: "exp-object-hunt",
+      name: "Object Hunt",
+      tagline: "Visual Memory",
+      description: "Locate and confirm the requested target symbol in array.",
+      icon: Diamond,
+      gradient: "from-[#EC4899] to-[#BE185D]",
+      border: "border-[#EC4899]/40",
+      accent: "#EC4899",
+    },
   ];
 
+  const handleGameClick = (id: string, name: string) => {
+    setSelectedGame({ id, name });
+    setModalOpen(true);
+  };
+
+  const handleOpenSignIn = () => {
+    setSelectedGame(null);
+    setModalOpen(true);
+  };
+
   return (
-    <div className="min-h-screen bg-[#05060A] text-white overflow-hidden flex flex-col">
+    <div className="min-h-screen bg-[#07090F] text-white overflow-hidden flex flex-col relative selection:bg-[#4F8CFF]/30 select-none">
       <Navbar />
 
       {/* ========================================================================= */}
-      {/* 1. HERO SECTION (Cinematic Neural Research Network)                      */}
+      {/* 1. HERO SECTION (Inspired by Reference Graphic with Isometric Surface)     */}
       {/* ========================================================================= */}
-      <section className="relative min-h-[92vh] flex items-center justify-center pt-24 pb-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
-        {/* Interactive Neural Canvas */}
-        <NeuralCanvas className="opacity-75" />
+      <section className="relative min-h-[85vh] flex items-center justify-center pt-24 pb-12 px-4 sm:px-6 lg:px-8 overflow-hidden">
+        {/* Subtle Neural Network mesh in background */}
+        <NeuralCanvas className="opacity-35" />
 
-        {/* Radial ambient lighting */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-gradient-to-tr from-[#4F8CFF]/15 via-[#8B5CF6]/15 to-transparent rounded-full blur-[140px] pointer-events-none" />
-        <div className="absolute bottom-10 right-10 w-[350px] h-[350px] bg-[#22D3EE]/10 rounded-full blur-[120px] pointer-events-none" />
+        {/* Isometric 3D Grid Plane Illusion */}
+        <div className="absolute inset-0 pointer-events-none opacity-25">
+          <div
+            className="w-[140%] h-[140%] -left-[20%] -top-[10%]"
+            style={{
+              backgroundImage: `
+                linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px)
+              `,
+              backgroundSize: "64px 64px",
+              transform: "perspective(900px) rotateX(55deg) rotateZ(-12deg) translateZ(-60px)",
+            }}
+          />
+        </div>
 
-        <div className="relative z-10 max-w-5xl mx-auto text-center space-y-8">
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/10 backdrop-blur-md shadow-[0_0_20px_rgba(79,140,255,0.2)] animate-in fade-in slide-in-from-top-4 duration-500">
-            <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-pulse shadow-[0_0_8px_#4F8CFF]" />
-            <span className="text-xs font-mono tracking-widest uppercase text-[#A5ADBD]">
-              COGNITIVE RESEARCH INFRASTRUCTURE
-            </span>
+        {/* Ambient Glow Orbs */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-gradient-to-tr from-[#3B82F6]/20 via-[#6366F1]/15 to-transparent rounded-full blur-[140px] pointer-events-none" />
+        <div className="absolute top-1/2 right-10 w-[420px] h-[420px] bg-[#06B6D4]/10 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="relative z-10 max-w-6xl mx-auto w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            {/* Left Hero Typography & Actions */}
+            <div className="lg:col-span-7 space-y-6 text-left">
+              {/* Badge */}
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/[0.04] border border-white/10 backdrop-blur-md">
+                <span className="w-2 h-2 rounded-full bg-[#3B82F6] animate-pulse shadow-[0_0_8px_#3B82F6]" />
+                <span className="text-[11px] font-mono tracking-widest uppercase text-[#A5ADBD]">
+                  COGNITIVE RESEARCH PROTOCOLS
+                </span>
+              </div>
+
+              {/* Headline matching user reference prompt */}
+              <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white leading-[1.08]">
+                Foundation of the <br />
+                <span className="bg-gradient-to-r from-[#60A5FA] via-[#38BDF8] to-[#818CF8] bg-clip-text text-transparent">
+                  new cognitive epoch
+                </span>
+              </h1>
+
+              {/* Supporting Copy */}
+              <p className="text-sm sm:text-base text-[#A5ADBD] max-w-xl leading-relaxed">
+                Designing behavioral experiments, measuring human response latency with sub-millisecond precision, and laying the foundation of cognitive discovery for researchers, participants, and communities alike.
+              </p>
+
+              {/* Button: "Know about Research" (instead of Contact Us!) */}
+              <div className="pt-2 flex flex-wrap items-center gap-4">
+                <Link href="/library">
+                  <button className="px-6 py-3 rounded-full bg-[#0D111A] hover:bg-[#141A26] text-white text-xs sm:text-sm font-semibold border border-white/15 shadow-[0_0_20px_rgba(0,0,0,0.6)] hover:border-white/30 transition-all flex items-center gap-2 group">
+                    <BookOpen className="w-4 h-4 text-[#38BDF8]" />
+                    <span>Know about Research</span>
+                    <ArrowRight className="w-4 h-4 text-[#A5ADBD] group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </Link>
+
+                <button
+                  onClick={handleOpenSignIn}
+                  className="px-6 py-3 rounded-full bg-gradient-to-r from-[#3B82F6] to-[#2563EB] hover:brightness-110 text-white text-xs sm:text-sm font-semibold shadow-[0_0_25px_-4px_rgba(59,130,246,0.5)] transition-all flex items-center gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Enter Platform</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Right: The 3D Elevated Glowing Tile (Visual tribute to user reference image) */}
+            <div className="lg:col-span-5 flex justify-center items-center relative">
+              <div className="relative w-72 h-72 sm:w-80 sm:h-80 flex items-center justify-center">
+                {/* 3D Isometric Tile */}
+                <div
+                  className="w-52 h-52 sm:w-60 sm:h-60 rounded-3xl bg-gradient-to-tr from-[#1D4ED8] via-[#2563EB] to-[#60A5FA] shadow-[0_25px_60px_-15px_rgba(37,99,235,0.7),0_0_40px_rgba(59,130,246,0.3)] border border-white/30 flex items-center justify-center p-6 text-center cursor-pointer transition-all hover:scale-105 duration-300 relative group"
+                  onClick={handleOpenSignIn}
+                  style={{
+                    transform: "perspective(800px) rotateX(25deg) rotateY(-18deg) rotateZ(12deg)",
+                  }}
+                >
+                  {/* Subtle top gloss ring */}
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 w-6 h-2 rounded-full bg-white/40" />
+
+                  <div className="space-y-2 text-white">
+                    <Hourglass className="w-10 h-10 mx-auto text-white drop-shadow-md animate-pulse" />
+                    <p className="text-sm font-bold tracking-tight">CognitiveLab Engine</p>
+                    <p className="text-[10px] font-mono text-white/80">
+                      5 Connected Studies · 0.001ms Latency
+                    </p>
+                    <span className="inline-block mt-2 text-[10px] font-mono bg-white/20 px-2.5 py-1 rounded-full text-white backdrop-blur-sm">
+                      Click to Enter →
+                    </span>
+                  </div>
+                </div>
+
+                {/* Ambient Floor Glow underneath the tile */}
+                <div className="absolute bottom-6 w-56 h-12 bg-[#2563EB]/40 blur-2xl rounded-full pointer-events-none" />
+              </div>
+            </div>
           </div>
 
-          {/* Headline */}
-          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.08]">
-            Measure Human Response. <br />
-            <span className="bg-gradient-to-r from-[#4F8CFF] via-[#22D3EE] to-[#8B5CF6] bg-clip-text text-transparent">
-              Understand Human Behavior.
-            </span>
-          </h1>
-
-          {/* Supporting Copy */}
-          <p className="text-base sm:text-lg text-[#A5ADBD] max-w-2xl mx-auto leading-relaxed font-normal">
-            Build cognitive experiments without code, run precise behavioral trials, and transform
-            participant responses into actionable research data.
-          </p>
-
-          {/* Action CTAs */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-            <Link href="/builder">
-              <Button
-                variant="glow"
-                size="lg"
-                rightIcon={<ArrowRight className="w-4 h-4" />}
-                className="w-full sm:w-auto"
-              >
-                Build an Experiment
-              </Button>
-            </Link>
-
-            <Link href="/analytics">
-              <Button
-                variant="secondary"
-                size="lg"
-                rightIcon={<BarChart3 className="w-4 h-4 text-[#22D3EE]" />}
-                className="w-full sm:w-auto"
-              >
-                Explore Analytics
-              </Button>
-            </Link>
-          </div>
-
-          {/* Live Data Sparkline Overlay */}
-          <div className="pt-8 flex flex-col items-center justify-center">
-            <div className="flex items-center gap-3">
-              <LiveSparkline initialValue={412} />
-              <Link
-                href="/run/exp-color-response/demo-session"
-                className="text-xs text-[#A5ADBD] hover:text-[#4F8CFF] underline font-mono flex items-center gap-1 transition-colors"
-              >
-                <span>Launch 10-Trial Demo</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+          {/* Floating Pill Center Dock (Like in reference) */}
+          <div className="mt-8 flex justify-center">
+            <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-[#0D111A]/90 border border-white/10 shadow-xl backdrop-blur-xl text-xs text-[#A5ADBD]">
+              <span className="flex items-center gap-1.5 text-white font-medium">
+                <Sparkles className="w-3.5 h-3.5 text-[#38BDF8]" />
+                5 Studies Live
+              </span>
+              <span>•</span>
+              <Link href="/analytics" className="hover:text-white transition-colors">
+                Telemetry
               </Link>
+              <span>•</span>
+              <Link href="/leaderboard" className="hover:text-white transition-colors">
+                Leaderboard
+              </Link>
+              <span>•</span>
+              <button
+                onClick={handleOpenSignIn}
+                className="text-[#60A5FA] hover:text-[#93C5FD] font-semibold flex items-center gap-1 transition-colors"
+              >
+                <span>Enter Workspace</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </div>
@@ -269,146 +379,73 @@ export default function LandingPage() {
       </section>
 
       {/* ========================================================================= */}
-      {/* 4. ANALYTICS SHOWCASE SECTION                                            */}
+      {/* 2. THE 5 GAME CAPSULES (Moving / Floating across the bottom as requested)   */}
       {/* ========================================================================= */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-white/[0.08] bg-[#07090E]">
-        <div className="max-w-7xl mx-auto space-y-12">
-          <div className="text-center space-y-3 max-w-2xl mx-auto">
-            <span className="text-xs font-mono uppercase tracking-widest text-[#8B5CF6]">
-              Deep Research Analytics
-            </span>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-              Instant Psychometric Intelligence
-            </h2>
-            <p className="text-sm text-[#A5ADBD]">
-              Real-time reaction-time progressions across trials, stimulus types, and participant cohorts.
-            </p>
-          </div>
-
-          {/* Quick Metrics & Line Chart */}
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <GlassPanel className="p-4 text-center">
-                <span className="text-[10px] text-[#697386] font-mono uppercase block">Avg Reaction Time</span>
-                <span className="text-2xl font-bold text-[#4F8CFF] font-mono">412 ms</span>
-              </GlassPanel>
-              <GlassPanel className="p-4 text-center">
-                <span className="text-[10px] text-[#697386] font-mono uppercase block">Accuracy</span>
-                <span className="text-2xl font-bold text-[#22C55E] font-mono">91.8%</span>
-              </GlassPanel>
-              <GlassPanel className="p-4 text-center">
-                <span className="text-[10px] text-[#697386] font-mono uppercase block">Trials Captured</span>
-                <span className="text-2xl font-bold text-white font-mono">8,420</span>
-              </GlassPanel>
-              <GlassPanel className="p-4 text-center">
-                <span className="text-[10px] text-[#697386] font-mono uppercase block">Active Participants</span>
-                <span className="text-2xl font-bold text-[#8B5CF6] font-mono">248</span>
-              </GlassPanel>
+      <section className="relative z-10 pb-16 px-4 sm:px-6 lg:px-8 border-t border-white/[0.06] pt-8 bg-[#06080D]">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-wider text-[#697386]">
+                Interactive Study Suite
+              </p>
+              <h2 className="text-xl font-bold text-white tracking-tight">
+                5 Connected Behavioral Experiments
+              </h2>
             </div>
-
-            <GlassPanel elevated className="p-6">
-              <ReactionTimeLineChart data={sampleProgression} showStimulusToggles={true} />
-            </GlassPanel>
-          </div>
-        </div>
-      </section>
-
-      {/* ========================================================================= */}
-      {/* 5. TECHNICAL ARCHITECTURE SECTION                                        */}
-      {/* ========================================================================= */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-white/[0.08]">
-        <div className="max-w-7xl mx-auto space-y-12">
-          <div className="text-center space-y-3 max-w-2xl mx-auto">
-            <span className="text-xs font-mono uppercase tracking-widest text-[#4F8CFF]">
-              Engine Architecture
-            </span>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-              Built For Serious Behavioral Research
-            </h2>
-            <p className="text-sm text-[#A5ADBD]">
-              Engineered with clean typed contracts, deterministic timing, and modular state architecture.
+            <p className="text-xs text-[#A5ADBD]">
+              Click any game capsule to test as a <strong>Participant</strong> or manage as a <strong>Researcher</strong>.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <GlassPanel className="p-6 space-y-3">
-              <Cpu className="w-8 h-8 text-[#4F8CFF]" />
-              <h3 className="text-base font-semibold text-white">Sub-Millisecond Clock</h3>
-              <p className="text-xs text-[#A5ADBD] leading-relaxed">
-                Utilizes high-resolution browser performance counters to isolate motor latency from
-                rendering jitter.
-              </p>
-            </GlassPanel>
+          {/* Row of 5 Capsule Cards in rounded white/frosted containers matching reference bottom dock */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {games.map((g) => {
+              const Icon = g.icon;
+              return (
+                <div
+                  key={g.id}
+                  onClick={() => handleGameClick(g.id, g.name)}
+                  className="p-5 rounded-2xl bg-[#0D111A] hover:bg-[#141A26] border border-white/10 hover:border-white/25 transition-all duration-200 cursor-pointer group flex flex-col justify-between space-y-4 hover:-translate-y-1 shadow-lg hover:shadow-2xl relative overflow-hidden"
+                >
+                  <div className="space-y-3">
+                    {/* Icon Capsule */}
+                    <div
+                      className={`w-12 h-12 rounded-xl bg-gradient-to-tr ${g.gradient} flex items-center justify-center text-white shadow-md group-hover:scale-110 transition-transform`}
+                    >
+                      <Icon className="w-6 h-6" />
+                    </div>
 
-            <GlassPanel className="p-6 space-y-3">
-              <GitBranch className="w-8 h-8 text-[#8B5CF6]" />
-              <h3 className="text-base font-semibold text-white">Typed API Service Layer</h3>
-              <p className="text-xs text-[#A5ADBD] leading-relaxed">
-                Clean repository patterns allow seamless switching between Mock Mode and enterprise REST backends.
-              </p>
-            </GlassPanel>
+                    <div>
+                      <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded bg-white/5 text-[#A5ADBD]">
+                        {g.tagline}
+                      </span>
+                      <h3 className="text-base font-bold text-white group-hover:text-[#60A5FA] transition-colors mt-1.5">
+                        {g.name}
+                      </h3>
+                      <p className="text-xs text-[#A5ADBD] leading-relaxed mt-1">
+                        {g.description}
+                      </p>
+                    </div>
+                  </div>
 
-            <GlassPanel className="p-6 space-y-3">
-              <ShieldCheck className="w-8 h-8 text-[#22C55E]" />
-              <h3 className="text-base font-semibold text-white">Zod Runtime Validation</h3>
-              <p className="text-xs text-[#A5ADBD] leading-relaxed">
-                Strict runtime validation guarantees every experiment flow and participant response vector matches schema.
-              </p>
-            </GlassPanel>
+                  <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-[11px] font-mono text-[#697386] group-hover:text-white transition-colors">
+                    <span>Click to Enter</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* ========================================================================= */}
-      {/* 6. CALL TO ACTION & FOOTER                                               */}
-      {/* ========================================================================= */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-white/[0.08] relative overflow-hidden bg-gradient-to-b from-[#07090E] to-[#05060A]">
-        <div className="max-w-4xl mx-auto text-center space-y-6 relative z-10">
-          <h2 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white">
-            Ready to Run Your Next Cognitive Study?
-          </h2>
-          <p className="text-sm sm:text-base text-[#A5ADBD] max-w-xl mx-auto">
-            Experience the no-code experiment builder and high-precision participant runtime in mock mode right now.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-            <Link href="/dashboard">
-              <Button variant="glow" size="lg" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                Launch Researcher Dashboard
-              </Button>
-            </Link>
-            <Link href="/run/exp-color-response/demo-session">
-              <Button variant="secondary" size="lg" leftIcon={<Play className="w-4 h-4 fill-current" />}>
-                Run 10-Trial Demo
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-white/[0.08] bg-[#05060A] py-12 px-4 sm:px-6 lg:px-8 text-xs text-[#697386]">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <span className="font-bold text-white font-mono tracking-tight">COGNITIVELAB</span>
-            <span>•</span>
-            <span>Cognitive Experimentation Platform</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-6 text-[#A5ADBD]">
-            <Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link>
-            <Link href="/builder" className="hover:text-white transition-colors">Builder</Link>
-            <Link href="/experiments" className="hover:text-white transition-colors">Experiments</Link>
-            <Link href="/analytics" className="hover:text-white transition-colors">Analytics</Link>
-            <Link href="/leaderboard" className="hover:text-white transition-colors">Leaderboard</Link>
-            <Link href="/settings" className="hover:text-white transition-colors">API Settings</Link>
-          </div>
-
-          <div>
-            © 2026 CognitiveLab Systems. Built for Behavioral & Psychological Research.
-          </div>
-        </div>
-      </footer>
+      {/* Role Selection Modal (triggers on click of any game or Sign In button) */}
+      <RoleSelectModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        targetGameId={selectedGame?.id}
+        targetGameName={selectedGame?.name}
+      />
     </div>
   );
 }

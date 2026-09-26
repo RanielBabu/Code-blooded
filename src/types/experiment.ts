@@ -11,7 +11,17 @@ export interface NodeData {
   label: string;
   category: NodeCategory;
   description?: string;
-  config: Record<string, any>;
+  /**
+   * Per-node-type settings bag.
+   *
+   * Deliberately `unknown` rather than `any`. Which keys exist depends on which
+   * node type authored the config, so it cannot be a closed object type without
+   * one interface per node. `unknown` keeps that flexibility while refusing to
+   * let an unvalidated value flow into arithmetic unchecked -- a value read from
+   * here has to be narrowed at the point of use. This is the same boundary the
+   * PROPOSAL describes as a known Phase 1 hardening item.
+   */
+  config: Record<string, unknown>;
   iconName?: string;
 }
 
@@ -36,7 +46,7 @@ export interface ExperimentEdge {
   animated?: boolean;
 }
 
-export type ExperimentStatus = "draft" | "published" | "archived";
+export type ExperimentStatus = "draft" | "published" | "disabled" | "archived";
 
 export interface Experiment {
   id: string;
@@ -52,10 +62,16 @@ export interface Experiment {
   updatedAt: string;
   author?: string;
   stats?: {
+    /** Counts are always known, even at zero. */
     participants: number;
     completedTrials: number;
-    avgReactionTimeMs: number;
-    accuracyPercent: number;
+    /**
+     * Measurements are null when no admissible trial exists, and must be
+     * rendered as a gap. A 0 here would assert an instant response and a
+     * wholly incorrect cohort.
+     */
+    avgReactionTimeMs: number | null;
+    accuracyPercent: number | null;
   };
 }
 
@@ -64,7 +80,7 @@ export interface NodeTypeDefinition {
   label: string;
   category: NodeCategory;
   description: string;
-  defaultData: Record<string, any>;
+  defaultData: Record<string, unknown>;
   icon: string;
   color: string;
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useMemo } from "react";
 import { AgeAnalyticsData } from "@/types/participant";
 import { analyticsService } from "@/lib/api/services/analytics-service";
+import { createAsyncStore, useAsyncStore } from "@/lib/store/async-store";
 
 interface AgeAnalyticsFilter {
   experimentId?: string;
@@ -12,31 +13,26 @@ interface AgeAnalyticsFilter {
 }
 
 export function useAgeAnalytics(filters?: AgeAnalyticsFilter) {
-  const [data, setData] = useState<AgeAnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Cohort filters are edited freely, so the store is keyed on the individual
+  // filter values. Changing a filter builds a new store, and the previous
+  // store's in-flight request can no longer commit -- otherwise a slow response
+  // for the previous cohort would be charted under the new label.
+  const store = useMemo(
+    () =>
+      createAsyncStore<AgeAnalyticsData | null>(
+        null,
+        () =>
+          analyticsService.getAgeAnalytics({
+            experimentId: filters?.experimentId,
+            sex: filters?.sex,
+            stimulusType: filters?.stimulusType,
+            ageGroup: filters?.ageGroup,
+          })
+      ),
+    [filters?.experimentId, filters?.sex, filters?.stimulusType, filters?.ageGroup]
+  );
 
-  const fetchAgeAnalytics = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await analyticsService.getAgeAnalytics(filters);
-      setData(res);
-    } catch (err: any) {
-      setError(err?.message || "Failed to load age cohort analytics");
-    } finally {
-      setLoading(false);
-    }
-  }, [filters?.experimentId, filters?.sex, filters?.stimulusType, filters?.ageGroup]);
+  const { data, loading, error, refresh: refetch } = useAsyncStore(store);
 
-  useEffect(() => {
-    fetchAgeAnalytics();
-  }, [fetchAgeAnalytics]);
-
-  return {
-    data,
-    loading,
-    error,
-    refetch: fetchAgeAnalytics,
-  };
+  return { data, loading, error, refetch };
 }

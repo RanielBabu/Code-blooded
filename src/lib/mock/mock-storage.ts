@@ -18,10 +18,10 @@ import { MOCK_PARTICIPANTS } from "./mock-participants";
 import { MOCK_TRIALS } from "./mock-trials";
 
 const STORAGE_KEYS = {
-  EXPERIMENTS: "cognitivelab_experiments_v2",
-  PARTICIPANTS: "cognitivelab_participants_v2",
-  TRIALS: "cognitivelab_trials_v2",
-  SETTINGS: "cognitivelab_settings_v2",
+  EXPERIMENTS: "cognitivelab_experiments_v3",
+  PARTICIPANTS: "cognitivelab_participants_v3",
+  TRIALS: "cognitivelab_trials_v3",
+  SETTINGS: "cognitivelab_settings_v3",
 };
 
 class MockStorageStore {
@@ -128,11 +128,38 @@ class MockStorageStore {
     return duplicated;
   }
 
-  public updateExperimentStatus(id: string, status: "draft" | "published" | "archived"): Experiment | null {
+  public updateExperimentStatus(
+    id: string,
+    status: "draft" | "published" | "disabled" | "archived"
+  ): Experiment | null {
     this.init();
     const exp = this.getExperimentById(id);
     if (!exp) return null;
     exp.status = status;
+    exp.updatedAt = new Date().toISOString();
+    this.persist();
+    return exp;
+  }
+
+  public getPublishedExperiments(): Experiment[] {
+    this.init();
+    return this.experiments.filter((e) => e.status === "published");
+  }
+
+  public isExperimentPlayable(id: string): boolean {
+    this.init();
+    const exp = this.getExperimentById(id);
+    return Boolean(exp && exp.status === "published");
+  }
+
+  public togglePublishExperiment(id: string, publish?: boolean): Experiment | null {
+    this.init();
+    const exp = this.getExperimentById(id);
+    if (!exp) return null;
+    const nextStatus = publish !== undefined
+      ? (publish ? "published" : "disabled")
+      : (exp.status === "published" ? "disabled" : "published");
+    exp.status = nextStatus;
     exp.updatedAt = new Date().toISOString();
     this.persist();
     return exp;

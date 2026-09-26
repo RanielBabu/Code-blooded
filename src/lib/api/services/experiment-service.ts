@@ -10,6 +10,13 @@ export const experimentService = {
     return res.data;
   },
 
+  async getPublished(): Promise<Experiment[]> {
+    const res = await apiRequest<Experiment[]>("/api/experiments?status=published", { method: "GET" }, () =>
+      mockStore.getPublishedExperiments()
+    );
+    return res.data;
+  },
+
   async getById(id: string): Promise<Experiment | null> {
     const res = await apiRequest<Experiment | null>(
       `/api/experiments/${id}`,
@@ -36,6 +43,24 @@ export const experimentService = {
       `/api/experiments/${id}/publish`,
       { method: "POST" },
       () => mockStore.updateExperimentStatus(id, "published")
+    );
+    return res.data;
+  },
+
+  async unpublish(id: string): Promise<Experiment | null> {
+    const res = await apiRequest<Experiment | null>(
+      `/api/experiments/${id}/unpublish`,
+      { method: "POST" },
+      () => mockStore.updateExperimentStatus(id, "disabled")
+    );
+    return res.data;
+  },
+
+  async togglePublish(id: string, publish?: boolean): Promise<Experiment | null> {
+    const res = await apiRequest<Experiment | null>(
+      `/api/experiments/${id}/toggle-publish`,
+      { method: "POST" },
+      () => mockStore.togglePublishExperiment(id, publish)
     );
     return res.data;
   },

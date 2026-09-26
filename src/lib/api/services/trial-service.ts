@@ -23,15 +23,16 @@ export const trialService = {
 
   async submitTrialRun(
     participantName: string,
-    trials: TrialResult[]
+    trials: TrialResult[],
+    activeParticipantId?: string
   ): Promise<{ participant: Participant; trials: TrialResult[] }> {
     const res = await apiRequest<{ participant: Participant; trials: TrialResult[] }>(
       "/api/trials/batch",
       {
         method: "POST",
-        body: JSON.stringify({ participantName, trials }),
+        body: JSON.stringify({ participantName, trials, activeParticipantId }),
       },
-      () => mockStore.recordTrialRun(participantName, trials)
+      () => mockStore.recordTrialRun(participantName, trials, activeParticipantId)
     );
     return res.data;
   },
